@@ -25,7 +25,8 @@ function App() {
   useEffect(() => {
     const fetchPlanes = async () => {
       try {
-        const res = await axios.get('http://127.0.0.1:8000/api/planes');
+        // BURADA CANLI LİNKİ YAZDIQ
+        const res = await axios.get('https://skytrack-backend-j6az.onrender.com/api/planes');
         setPlanes(res.data.planes);
       } catch (error) {
         console.error("Data çəkilərkən xəta:", error);
@@ -40,7 +41,8 @@ function App() {
   const loadTransport = async () => {
     if (!transportData) {
       try {
-        const res = await axios.get('http://127.0.0.1:8000/api/transport');
+        // BURADA CANLI LİNKİ YAZDIQ
+        const res = await axios.get('https://skytrack-backend-j6az.onrender.com/api/transport');
         setTransportData(res.data);
       } catch (error) {
         console.error("Transport xətası:", error);
@@ -55,7 +57,7 @@ function App() {
     }
   };
 
-  // AXTARIŞ MƏNTİQİ: Artıq .startsWith() istifadə edirik
+  // Axtarış məntiqi (startsWith)
   const filteredPlanes = planes.filter((plane) => 
     plane.callsign.toLowerCase().startsWith(searchQuery.toLowerCase())
   );
@@ -67,43 +69,24 @@ function App() {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
       
       {/* HEADER PANELİ */}
-      <header style={{ 
-        background: '#1e3a8a', 
-        color: 'white', 
-        padding: '15px 30px', 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-        zIndex: 1000,
-        flexWrap: 'wrap',
-        gap: '15px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <header className="main-header">
+        <div className="logo-area">
           <h1 style={{ margin: 0, fontSize: '24px', letterSpacing: '1px' }}>✈️ SkyTrack</h1>
           <span style={{ fontSize: '14px', opacity: 0.8 }}>Azərbaycan Real-vaxt İzləmə</span>
         </div>
         
         {/* AXTARIŞ QUTUSU */}
-        <div style={{ flex: 1, maxWidth: '300px', margin: '0 20px' }}>
+        <div className="search-container">
           <input 
             type="text" 
             placeholder="Reys axtar (məs: THY, AHY...)" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              borderRadius: '20px',
-              border: 'none',
-              outline: 'none',
-              fontSize: '14px',
-              boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.1)'
-            }}
+            className="search-input"
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '30px', fontSize: '15px', alignItems: 'center' }}>
+        <div className="stats-container">
           <div 
             onClick={() => setShowList(!showList)} 
             style={{ cursor: 'pointer', padding: '5px 10px', borderRadius: '5px', background: showList ? '#2563eb' : 'transparent', transition: '0.3s' }}
@@ -124,14 +107,7 @@ function App() {
         
         {/* YAN PANEL (SİYAHI) */}
         {showList && (
-          <div style={{ 
-            width: '300px', 
-            background: 'white', 
-            boxShadow: '2px 0 10px rgba(0,0,0,0.1)', 
-            zIndex: 999,
-            overflowY: 'auto',
-            padding: '15px'
-          }}>
+          <div className="sidebar">
             <h3 style={{ margin: '0 0 15px 0', color: '#1e3a8a' }}>
               Təyyarələr ({filteredPlanes.length})
             </h3>
@@ -142,14 +118,7 @@ function App() {
                 <div 
                   key={plane.icao24}
                   onClick={() => flyToPlane(plane.latitude, plane.longitude)}
-                  style={{ 
-                    padding: '10px', 
-                    borderBottom: '1px solid #eee', 
-                    cursor: 'pointer',
-                    transition: 'background 0.2s'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  className="plane-list-item"
                 >
                   <div style={{ fontWeight: 'bold', color: '#1e3a8a' }}>{plane.callsign}</div>
                   <div style={{ fontSize: '12px', color: '#666' }}>
