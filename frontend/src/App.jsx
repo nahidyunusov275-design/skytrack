@@ -5,6 +5,10 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import './App.css';
 
+// TEST ÜÇÜN: İstanbul (IST), Nyu-York (JFK), Moskva (SVO), Dubay (DXB) əlavə edildi.
+// Sonra bunları silib yalnız Azərbaycan kodlarını saxlayacaqsan.
+const AZ_AIRPORTS = ['GYD', 'KVD', 'GBB', 'LLK', 'FZL', 'NAJ', 'IST', 'JFK', 'SVO', 'DXB'];
+
 // Təyyarə ikonu
 const getPlaneIcon = (heading) => {
   return L.divIcon({
@@ -15,7 +19,7 @@ const getPlaneIcon = (heading) => {
   });
 };
 
-// YENİ KOMPONENT: Popup daxilində marşrutu və transportu yükləyir
+// Popup daxilində marşrutu və transportu yükləyir
 const PlanePopupContent = ({ plane }) => {
   const [route, setRoute] = useState(null);
   const [loadingRoute, setLoadingRoute] = useState(false);
@@ -24,7 +28,7 @@ const PlanePopupContent = ({ plane }) => {
   // Təyyarənin marşrutunu yükləyirik
   useEffect(() => {
     const fetchRoute = async () => {
-      if (!plane.callsign) return;
+      if (!plane.callsign || plane.callsign === "Naməlum") return;
       setLoadingRoute(true);
       try {
         const res = await axios.get(`https://skytrack-backend-j6az.onrender.com/api/flight-route/${plane.callsign.trim()}`);
@@ -52,11 +56,14 @@ const PlanePopupContent = ({ plane }) => {
     }
   };
 
+  // Yoxlayırıq: Bu təyyarə siyahıdakı hava limanlarına gedirmi?
+  const isGoingToAZ = route && AZ_AIRPORTS.includes(route.destination_iata);
+
   return (
     <div style={{ minWidth: '220px' }}>
       <h3 style={{ margin: '0 0 10px 0', color: '#1e3a8a' }}>{plane.callsign}</h3>
       
-      {/* MARŞRUT MƏLUMATI (YENİ) */}
+      {/* MARŞRUT MƏLUMATI */}
       <div style={{ marginBottom: '10px', padding: '8px', background: '#e0f2fe', borderRadius: '5px' }}>
         {loadingRoute ? (
           <p style={{ margin: 0, fontSize: '13px', color: '#0284c7' }}>Marşrut axtarılır... ⏳</p>
@@ -74,28 +81,32 @@ const PlanePopupContent = ({ plane }) => {
       <p style={{ margin: '5px 0' }}><b>Hündürlük:</b> {plane.altitude_m ? `${plane.altitude_m} m` : '—'}</p>
       <p style={{ margin: '5px 0' }}><b>Sürət:</b> {plane.velocity_ms ? `${plane.velocity_ms} m/s` : '—'}</p>
       
-      <hr style={{ margin: '10px 0' }} />
-      
-      <details onToggle={loadTransport} style={{ cursor: 'pointer' }}>
-        <summary style={{ fontWeight: 'bold', color: '#2563eb' }}>
-          🛬 Hava limanından necə çıxım?
-        </summary>
-        {transportData ? (
-          <div style={{ marginTop: '10px', fontSize: '13px' }}>
-            <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>{transportData.airport}</p>
-            {transportData.options.map((opt, i) => (
-              <div key={i} style={{ marginBottom: '8px', padding: '5px', background: '#f3f4f6', borderRadius: '5px' }}>
-                <b>{opt.type}</b><br/>
-                Qiymət: {opt.price} | Vaxt: {opt.time}<br/>
-                <span style={{ color: '#666' }}>{opt.schedule}</span><br/>
-                <span style={{ color: '#888', fontSize: '11px' }}>{opt.note}</span>
+      {/* TRANSPORT PANELİ: YALNIZ SİYAHIDAKI HAVA LİMANLARINA GƏLƏNLƏRDƏ GÖRÜNÜR */}
+      {isGoingToAZ && (
+        <>
+          <hr style={{ margin: '10px 0' }} />
+          <details onToggle={loadTransport} style={{ cursor: 'pointer' }}>
+            <summary style={{ fontWeight: 'bold', color: '#2563eb' }}>
+              🛬 {route.destination_city} hava limanından necə çıxım?
+            </summary>
+            {transportData ? (
+              <div style={{ marginTop: '10px', fontSize: '13px' }}>
+                <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>{transportData.airport}</p>
+                {transportData.options.map((opt, i) => (
+                  <div key={i} style={{ marginBottom: '8px', padding: '5px', background: '#f3f4f6', borderRadius: '5px' }}>
+                    <b>{opt.type}</b><br/>
+                    Qiymət: {opt.price} | Vaxt: {opt.time}<br/>
+                    <span style={{ color: '#666' }}>{opt.schedule}</span><br/>
+                    <span style={{ color: '#888', fontSize: '11px' }}>{opt.note}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ fontSize: '12px', color: '#666' }}>Yüklənir...</p>
-        )}
-      </details>
+            ) : (
+              <p style={{ fontSize: '12px', color: '#666' }}>Yüklənir...</p>
+            )}
+          </details>
+        </>
+      )}
     </div>
   );
 };
@@ -220,7 +231,6 @@ function App() {
                   icon={getPlaneIcon(plane.heading)}
                 >
                   <Popup>
-                    {/* BURADA YENİ KOMPONENTİ ÇAĞIRIRIQ */}
                     <PlanePopupContent plane={plane} />
                   </Popup>
                 </Marker>

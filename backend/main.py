@@ -1,68 +1,53 @@
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import opensky
+import httpx
 
-app = FastAPI(title="SkyTrack API")
+app = FastAPI()
 
-# Frontend-in (React) bu API-yə girişinə icazə veririk
+# CORS ayarları (Frontend-in qoşulması üçün)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Development üçün hər yerə açıqdır
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-def read_root():
-    return {"message": "SkyTrack API işləyir! 🚀"}
-
 @app.get("/api/planes")
-def get_planes():
-    """Azərbaycan üzərindəki təyyarələrin siyahısını qaytarır."""
-    planes = opensky.get_planes()
-    return {
-        "count": len(planes),
-        "planes": planes
-    }
-@app.get("/api/transport")
-def get_transport():
-    """Hava limanından şəhərə nəqliyyat variantları"""
-    return {
-        "airport": "Heydər Əliyev Hava Limanı (GYD)",
-        "options": [
-            {
-                "type": "🚌 Aero Express",
-                "price": "1.30 AZN",
-                "time": "40 dəq",
-                "schedule": "Növbəti: 14:45, 15:15",
-                "note": "28 May metro istiqaməti"
-            },
-            {
-                "type": "🚕 Taksi (Bolt/Yango)",
-                "price": "20-30 AZN",
-                "time": "25 dəq",
-                "schedule": "İstənilən vaxt",
-                "note": "Rəsmi taksi Terminal 1-dədir"
-            },
-            {
-                "type": "🚗 Şəxsi Transfer",
-                "price": "50+ AZN",
-                "time": "20 dəq",
-                "schedule": "Əvvəlcədən bron",
-                "note": "Lüks avtomobillər"
-            }
-        ]
-    }
+async def get_planes():
+    # Azərbaycan ətrafı
+    url = "https://opensky-network.org/api/states/all?lamin=38.0&lomin=44.0&lamax=42.0&lomax=51.0"
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url, timeout=10.0)
+            if response.status_code == 200:
+                data = response.json()
+                states = data.get("states", [])
+                planes = []
+                if states:
+                    for s in states:
+                        if s[5] is not None and s[6] is not None:
+                            planes.append({
+                                "icao24": s[0],
+                                "callsign": s[1].strip() if s[1] else "Naməlum",
+                                "country": s[2],
+                                "longitude": s[5],
+                                "latitude": s[6],
+                                "altitude_m": s[7],
+                                "velocity_ms": s[9],
+                                "heading": s[10]
+                            })
+                return {"planes": planes}
+            return {"planes": []}
+        except Exception as e:
+            return {"error": str(e)}
+
 @app.get("/api/flight-route/{callsign}")
 async def get_flight_route(callsign: str):
-    # Callsign-ın əvvəlində/sonunda boşluqlar varsa təmizləyirik
     callsign = callsign.strip().upper()
     if not callsign:
         return {"error": "Callsign tapılmadı"}
 
-    # Pulsuz marşrut API-si (adsbdb.com)
     url = f"https://api.adsbdb.com/v0/callsign/{callsign}"
     
     async with httpx.AsyncClient() as client:
@@ -70,7 +55,6 @@ async def get_flight_route(callsign: str):
             response = await client.get(url, timeout=5.0)
             if response.status_code == 200:
                 data = response.json()
-                # API-dən gələn cavabı yoxlayırıq
                 if "response" in data and "flightroute" in data["response"]:
                     route = data["response"]["flightroute"]
                     origin = route.get("origin", {})
@@ -88,3 +72,32 @@ async def get_flight_route(callsign: str):
             return {"error": "Bu təyyarə üçün marşrut məlumatı tapılmadı."}
         except Exception as e:
             return {"error": f"Xəta baş verdi: {str(e)}"}
+
+@app.get("/api/transport")
+async def get_transport():
+    return {
+        "airport": "Heydər Əliyev Beynəlxalq Hava Limanı (GYD)",
+        "options": [
+            {
+                "type": "Aero Express (Metro)",
+                "price": "1.50 AZN",
+                "time": "30 dəqiqə",
+                "schedule": "Hər 20 dəqiqədə bir",
+                "note": "Birbaşa mərkəzə gedir"
+            },
+            {
+                "type": "Avtobus (N1)",
+                "price": "0.50 AZN",
+                "time": "45 dəqiqə",
+                "schedule": "Gecə saatlarında da işləyir",
+                "note": "Bakı dəmir yolu vağzalına qədər"
+            },
+            {
+                "type": "Taksi (Bolt/Uber)",
+                "price": "15-25 AZN",
+                "time": "20 dəqiqə",
+                "schedule": "24/7",
+                "note": "Tətbiq vasitəsilə sifariş verin"
+            }
+        ]
+    }
