@@ -15,9 +15,93 @@ const getPlaneIcon = (heading) => {
   });
 };
 
+// YENİ KOMPONENT: Popup daxilində marşrutu və transportu yükləyir
+const PlanePopupContent = ({ plane }) => {
+  const [route, setRoute] = useState(null);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [transportData, setTransportData] = useState(null);
+
+  // Təyyarənin marşrutunu yükləyirik
+  useEffect(() => {
+    const fetchRoute = async () => {
+      if (!plane.callsign) return;
+      setLoadingRoute(true);
+      try {
+        const res = await axios.get(`https://skytrack-backend-j6az.onrender.com/api/flight-route/${plane.callsign.trim()}`);
+        if (!res.data.error) {
+          setRoute(res.data);
+        }
+      } catch (err) {
+        console.error("Marşrut xətası:", err);
+      } finally {
+        setLoadingRoute(false);
+      }
+    };
+    fetchRoute();
+  }, [plane.callsign]);
+
+  // Transport məlumatını yükləyirik
+  const loadTransport = async () => {
+    if (!transportData) {
+      try {
+        const res = await axios.get('https://skytrack-backend-j6az.onrender.com/api/transport');
+        setTransportData(res.data);
+      } catch (error) {
+        console.error("Transport xətası:", error);
+      }
+    }
+  };
+
+  return (
+    <div style={{ minWidth: '220px' }}>
+      <h3 style={{ margin: '0 0 10px 0', color: '#1e3a8a' }}>{plane.callsign}</h3>
+      
+      {/* MARŞRUT MƏLUMATI (YENİ) */}
+      <div style={{ marginBottom: '10px', padding: '8px', background: '#e0f2fe', borderRadius: '5px' }}>
+        {loadingRoute ? (
+          <p style={{ margin: 0, fontSize: '13px', color: '#0284c7' }}>Marşrut axtarılır... ⏳</p>
+        ) : route ? (
+          <div style={{ fontSize: '13px' }}>
+            <p style={{ margin: '0 0 5px 0' }}><b>🛫 Hardan:</b> {route.origin_city} ({route.origin_iata})</p>
+            <p style={{ margin: 0 }}><b>🛬 Hara:</b> {route.destination_city} ({route.destination_iata})</p>
+          </div>
+        ) : (
+          <p style={{ margin: 0, fontSize: '13px', color: '#666' }}>Marşrut məlumatı tapılmadı.</p>
+        )}
+      </div>
+
+      <p style={{ margin: '5px 0' }}><b>Ölkə:</b> {plane.country}</p>
+      <p style={{ margin: '5px 0' }}><b>Hündürlük:</b> {plane.altitude_m ? `${plane.altitude_m} m` : '—'}</p>
+      <p style={{ margin: '5px 0' }}><b>Sürət:</b> {plane.velocity_ms ? `${plane.velocity_ms} m/s` : '—'}</p>
+      
+      <hr style={{ margin: '10px 0' }} />
+      
+      <details onToggle={loadTransport} style={{ cursor: 'pointer' }}>
+        <summary style={{ fontWeight: 'bold', color: '#2563eb' }}>
+          🛬 Hava limanından necə çıxım?
+        </summary>
+        {transportData ? (
+          <div style={{ marginTop: '10px', fontSize: '13px' }}>
+            <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>{transportData.airport}</p>
+            {transportData.options.map((opt, i) => (
+              <div key={i} style={{ marginBottom: '8px', padding: '5px', background: '#f3f4f6', borderRadius: '5px' }}>
+                <b>{opt.type}</b><br/>
+                Qiymət: {opt.price} | Vaxt: {opt.time}<br/>
+                <span style={{ color: '#666' }}>{opt.schedule}</span><br/>
+                <span style={{ color: '#888', fontSize: '11px' }}>{opt.note}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p style={{ fontSize: '12px', color: '#666' }}>Yüklənir...</p>
+        )}
+      </details>
+    </div>
+  );
+};
+
 function App() {
   const [planes, setPlanes] = useState([]);
-  const [transportData, setTransportData] = useState(null);
   const [showList, setShowList] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const mapRef = useRef(null);
@@ -25,7 +109,6 @@ function App() {
   useEffect(() => {
     const fetchPlanes = async () => {
       try {
-        // BURADA CANLI LİNKİ YAZDIQ
         const res = await axios.get('https://skytrack-backend-j6az.onrender.com/api/planes');
         setPlanes(res.data.planes);
       } catch (error) {
@@ -38,18 +121,6 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const loadTransport = async () => {
-    if (!transportData) {
-      try {
-        // BURADA CANLI LİNKİ YAZDIQ
-        const res = await axios.get('https://skytrack-backend-j6az.onrender.com/api/transport');
-        setTransportData(res.data);
-      } catch (error) {
-        console.error("Transport xətası:", error);
-      }
-    }
-  };
-
   const flyToPlane = (lat, lng) => {
     if (mapRef.current) {
       mapRef.current.flyTo([lat, lng], 10, { duration: 2 });
@@ -57,7 +128,6 @@ function App() {
     }
   };
 
-  // Axtarış məntiqi (startsWith)
   const filteredPlanes = planes.filter((plane) => 
     plane.callsign.toLowerCase().startsWith(searchQuery.toLowerCase())
   );
@@ -150,35 +220,8 @@ function App() {
                   icon={getPlaneIcon(plane.heading)}
                 >
                   <Popup>
-                    <div style={{ minWidth: '200px' }}>
-                      <h3 style={{ margin: '0 0 10px 0', color: '#1e3a8a' }}>{plane.callsign}</h3>
-                      <p style={{ margin: '5px 0' }}><b>Ölkə:</b> {plane.country}</p>
-                      <p style={{ margin: '5px 0' }}><b>Hündürlük:</b> {plane.altitude_m ? `${plane.altitude_m} m` : '—'}</p>
-                      <p style={{ margin: '5px 0' }}><b>Sürət:</b> {plane.velocity_ms ? `${plane.velocity_ms} m/s` : '—'}</p>
-                      
-                      <hr style={{ margin: '10px 0' }} />
-                      
-                      <details onToggle={loadTransport} style={{ cursor: 'pointer' }}>
-                        <summary style={{ fontWeight: 'bold', color: '#2563eb' }}>
-                          🛬 Hava limanından necə çıxım?
-                        </summary>
-                        {transportData ? (
-                          <div style={{ marginTop: '10px', fontSize: '13px' }}>
-                            <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>{transportData.airport}</p>
-                            {transportData.options.map((opt, i) => (
-                              <div key={i} style={{ marginBottom: '8px', padding: '5px', background: '#f3f4f6', borderRadius: '5px' }}>
-                                <b>{opt.type}</b><br/>
-                                Qiymət: {opt.price} | Vaxt: {opt.time}<br/>
-                                <span style={{ color: '#666' }}>{opt.schedule}</span><br/>
-                                <span style={{ color: '#888', fontSize: '11px' }}>{opt.note}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p style={{ fontSize: '12px', color: '#666' }}>Yüklənir...</p>
-                        )}
-                      </details>
-                    </div>
+                    {/* BURADA YENİ KOMPONENTİ ÇAĞIRIRIQ */}
+                    <PlanePopupContent plane={plane} />
                   </Popup>
                 </Marker>
               )
