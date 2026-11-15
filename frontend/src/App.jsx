@@ -71,7 +71,7 @@ const PlanePopupContent = ({ plane }) => {
       .finally(() => setFlightInfoLoading(false));
   }, [route, plane.icao24, plane.latitude, plane.longitude, plane.velocity_ms, plane.vertical_rate, plane.on_ground]);
 
-  // YENİ: Dinamik transport yükləmə
+  // Dinamik transport yükləmə
   const loadTransport = async () => {
     if (!transportData && route?.destination_iata) {
       try {
@@ -171,15 +171,20 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const mapRef = useRef(null);
 
+  // DƏYİŞİKLİK BURADADIR: Boş siyahı gəlsə, köhnə təyyarələri saxlayır
   useEffect(() => {
     const fetchPlanes = async () => {
       try {
         const res = await axios.get(`${API_BASE}/api/planes`);
-        setPlanes(res.data.planes);
+        // YALNIZ təyyarə varsa yenilə (boş siyahı gəlsə, köhnələri saxla)
+        if (res.data.planes && res.data.planes.length > 0) {
+          setPlanes(res.data.planes);
+        }
       } catch (error) {
         console.error("Data çəkilərkən xəta:", error);
       }
     };
+
     fetchPlanes();
     const interval = setInterval(fetchPlanes, 5000);
     return () => clearInterval(interval);
