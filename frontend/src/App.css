@@ -156,3 +156,74 @@ body {
   color: #9a3412;
   border: 1px solid #fdba74;
 }
+/* ============ SİMULYASİYA PANELİ ============ */
+.simulation-panel {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.95);
+  color: white;
+  padding: 15px 25px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  text-align: center;
+  min-width: 350px;
+  border: 1px solid #334155;
+}
+
+.simulation-panel h3 {
+  margin: 0 0 10px 0;
+  color: #f87171;
+  font-size: 18px;
+}
+
+.simulation-panel p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.sim-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 15px 0;
+}
+
+.sim-controls button {
+  padding: 10px;
+  background: #334155;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: 0.2s;
+}
+
+.sim-controls button:hover {
+  background: #475569;
+}
+
+.sim-controls button.active {
+  background: #ef4444;
+  box-shadow: 0 0 10px #ef4444;
+}
+
+.stop-btn {
+  width: 100%;
+  padding: 10px;
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+  transition: 0.2s;
+}
+
+.stop-btn:hover {
+  background: #dc2626;
+}
