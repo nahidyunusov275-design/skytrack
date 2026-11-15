@@ -80,42 +80,50 @@ AIRLABS_KEY = os.getenv("AIRLABS_API_KEY", "")
 
 @app.get("/api/planes")
 async def get_planes():
-    # DƏYİŞİKLİK BURADADIR: OpenSky yerinə adsb.lol API istifadə edirik
-    url = "https://api.adsb.lol/v2/lat/40.0/lon/47.5/dist/250"
+    # 3 fərqli API yoxlayırıq (biri işləməsə, digəri işləyəcək)
+    urls = [
+        "https://api.airplanes.live/v2/point/40.0/47.5/250",
+        "https://opendata.adsb.fi/api/v2/lat/40.0/lon/47.5/dist/250",
+        "https://api.adsb.lol/v2/lat/40.0/lon/47.5/dist/250"
+    ]
+    
     async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(url, timeout=10.0)
-            if response.status_code == 200:
-                data = response.json()
-                ac_list = data.get("ac", [])
-                planes = []
-                for ac in ac_list:
-                    if ac.get("lat") and ac.get("lon"):
-                        gs_knots = ac.get("gs", 0)
-                        velocity_ms = round(gs_knots * 0.514444, 1) if gs_knots else None
-                        
-                        alt_ft = ac.get("alt_baro", 0)
-                        altitude_m = round(alt_ft * 0.3048) if isinstance(alt_ft, (int, float)) else None
-                        
-                        vrate_ft = ac.get("baro_rate", 0)
-                        vertical_rate = round(vrate_ft * 0.00508, 1) if isinstance(vrate_ft, (int, float)) else None
+        for url in urls:
+            try:
+                response = await client.get(url, timeout=10.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    ac_list = data.get("ac", [])
+                    planes = []
+                    for ac in ac_list:
+                        if ac.get("lat") and ac.get("lon"):
+                            gs_knots = ac.get("gs", 0)
+                            velocity_ms = round(gs_knots * 0.514444, 1) if gs_knots else None
+                            
+                            alt_ft = ac.get("alt_baro", 0)
+                            altitude_m = round(alt_ft * 0.3048) if isinstance(alt_ft, (int, float)) else None
+                            
+                            vrate_ft = ac.get("baro_rate", 0)
+                            vertical_rate = round(vrate_ft * 0.00508, 1) if isinstance(vrate_ft, (int, float)) else None
 
-                        planes.append({
-                            "icao24": ac.get("hex", ""),
-                            "callsign": ac.get("flight", "").strip() or "Naməlum",
-                            "country": "Bilinmir",
-                            "longitude": ac.get("lon"),
-                            "latitude": ac.get("lat"),
-                            "altitude_m": altitude_m,
-                            "on_ground": alt_ft == "ground",
-                            "velocity_ms": velocity_ms,
-                            "heading": ac.get("track", 0),
-                            "vertical_rate": vertical_rate,
-                        })
-                return {"planes": planes}
-            return {"planes": []}
-        except Exception as e:
-            return {"error": str(e)}
+                            planes.append({
+                                "icao24": ac.get("hex", ""),
+                                "callsign": ac.get("flight", "").strip() or "Naməlum",
+                                "country": "Bilinmir",
+                                "longitude": ac.get("lon"),
+                                "latitude": ac.get("lat"),
+                                "altitude_m": altitude_m,
+                                "on_ground": alt_ft == "ground",
+                                "velocity_ms": velocity_ms,
+                                "heading": ac.get("track", 0),
+                                "vertical_rate": vertical_rate,
+                            })
+                    if planes:
+                        return {"planes": planes}
+            except Exception as e:
+                continue  # Xəta olsa, növbəti API-yə keç
+                
+    return {"planes": [], "error": "Bütün API-lər uğursuz oldu və ya heç bir təyyarə tapılmadı."}
 
 @app.get("/api/flight-route/{callsign}")
 async def get_flight_route(callsign: str):
