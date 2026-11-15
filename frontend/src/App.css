@@ -110,3 +110,49 @@ body {
     width: 80%;
   }
 }
+/* ============ ETA KARTI ============ */
+.eta-card {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.eta-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.eta-row:last-child {
+  border-bottom: none;
+}
+
+.status-cruising { color: #2563eb; }
+.status-descending { color: #d97706; }
+.status-approaching { color: #ea580c; }
+.status-landed { color: #16a34a; }
+.status-unknown { color: #64748b; }
+
+.delay-box {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.delay-box.ontime {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.delay-box.delayed {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
