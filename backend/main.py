@@ -80,29 +80,38 @@ AIRLABS_KEY = os.getenv("AIRLABS_API_KEY", "")
 
 @app.get("/api/planes")
 async def get_planes():
-    url = "https://opensky-network.org/api/states/all?lamin=38.0&lomin=44.0&lamax=42.0&lomax=51.0"
+    # DƏYİŞİKLİK BURADADIR: OpenSky yerinə adsb.lol API istifadə edirik
+    url = "https://api.adsb.lol/v2/lat/40.0/lon/47.5/dist/250"
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url, timeout=10.0)
             if response.status_code == 200:
                 data = response.json()
-                states = data.get("states", [])
+                ac_list = data.get("ac", [])
                 planes = []
-                if states:
-                    for s in states:
-                        if s[5] is not None and s[6] is not None:
-                            planes.append({
-                                "icao24": s[0],
-                                "callsign": s[1].strip() if s[1] else "Naməlum",
-                                "country": s[2],
-                                "longitude": s[5],
-                                "latitude": s[6],
-                                "altitude_m": s[7],
-                                "on_ground": s[8] if len(s) > 8 and s[8] is not None else False,
-                                "velocity_ms": s[9],
-                                "heading": s[10],
-                                "vertical_rate": s[11] if len(s) > 11 else None,
-                            })
+                for ac in ac_list:
+                    if ac.get("lat") and ac.get("lon"):
+                        gs_knots = ac.get("gs", 0)
+                        velocity_ms = round(gs_knots * 0.514444, 1) if gs_knots else None
+                        
+                        alt_ft = ac.get("alt_baro", 0)
+                        altitude_m = round(alt_ft * 0.3048) if isinstance(alt_ft, (int, float)) else None
+                        
+                        vrate_ft = ac.get("baro_rate", 0)
+                        vertical_rate = round(vrate_ft * 0.00508, 1) if isinstance(vrate_ft, (int, float)) else None
+
+                        planes.append({
+                            "icao24": ac.get("hex", ""),
+                            "callsign": ac.get("flight", "").strip() or "Naməlum",
+                            "country": "Bilinmir",
+                            "longitude": ac.get("lon"),
+                            "latitude": ac.get("lat"),
+                            "altitude_m": altitude_m,
+                            "on_ground": alt_ft == "ground",
+                            "velocity_ms": velocity_ms,
+                            "heading": ac.get("track", 0),
+                            "vertical_rate": vertical_rate,
+                        })
                 return {"planes": planes}
             return {"planes": []}
         except Exception as e:
