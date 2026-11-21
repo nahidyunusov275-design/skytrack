@@ -3,21 +3,16 @@ import time
 import random
 
 ADSB_URL = "https://api.adsb.lol/v2/lat/40.4093/lon/49.8671/dist/250"
-
-_cache = {
-    "data": [],
-    "timestamp": 0
-}
+_cache = {"data": [], "timestamp": 0}
 
 def generate_fake_planes():
     fake_planes = []
     airlines = ["AHY", "THY", "UAE", "DLH", "QTR", "AFL", "SVR"]
-    countries = ["Azerbaijan", "Turkey", "UAE", "Germany", "Qatar", "Russia", "Russia"]
     for i in range(15):
         fake_planes.append({
             "icao24": f"fake{i}",
             "callsign": f"{random.choice(airlines)}{random.randint(100, 999)}",
-            "country": random.choice(countries),
+            "country": "Unknown",
             "longitude": random.uniform(44.5, 50.5),
             "latitude": random.uniform(38.5, 41.5),
             "altitude_m": random.randint(5000, 12000),
@@ -49,18 +44,16 @@ def fetch_planes_from_adsb():
                 })
             return planes
         return []
-    except Exception as e:
+    except Exception:
         return []
 
 def get_planes_3d():
     global _cache
     now = time.time()
-    
     if not _cache["data"] or (now - _cache["timestamp"] > 15):
         new_data = fetch_planes_from_adsb()
         if not new_data:
             new_data = generate_fake_planes()
         _cache["data"] = new_data
         _cache["timestamp"] = now
-            
     return _cache["data"]
