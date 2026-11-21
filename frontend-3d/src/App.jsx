@@ -23,7 +23,6 @@ export default function App() {
       terrain: Cesium.Terrain.fromWorldTerrain()
     })
 
-    // Kameranı Bakıya yönəlt
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(49.8671, 40.4093, 1500000),
       orientation: {
@@ -33,13 +32,13 @@ export default function App() {
       },
     })
 
-    // 🛩️ Backend-dən təyyarələri çəkən funksiya
     const fetchAndDrawPlanes = async () => {
       try {
-        const response = await fetch("https://skytrack-backend-j6az.onrender.com/api/planes")
+        const response = await fetch("https://skytrack-backend-j6az.onrender.com/api/planes-3d")
         const data = await response.json()
         
-        // Hər yenilənmədə köhnə təyyarələri təmizlə
+        if (viewer.isDestroyed()) return;
+
         viewer.entities.removeAll()
 
         if (data.planes && data.planes.length > 0) {
@@ -73,10 +72,7 @@ export default function App() {
       }
     }
 
-    // İlk dəfə işə sal
     fetchAndDrawPlanes()
-
-    // Hər 15 saniyədən bir yenilə (Real vaxt effekti)
     const intervalId = setInterval(fetchAndDrawPlanes, 15000)
 
     return () => {

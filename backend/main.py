@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from opensky import get_planes
+from opensky_3d import get_planes_3d # Yeni faylı import edirik
 
 app = FastAPI()
 
@@ -12,9 +13,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 2D VERSİYA ÜÇÜN (HEÇ NƏ DƏYİŞMİR)
 @app.get("/api/planes")
 def api_planes():
-    print("--- API SORĞUSU GƏLDİ ---")
     planes = get_planes()
-    print(f"--- QAYTARILAN TƏYYARƏ SAYI: {len(planes)} ---")
+    if not planes:
+        return {"planes": [], "error": "Heç bir təyyarə tapılmadı."}
+    return {"planes": planes}
+
+# 3D VERSİYA ÜÇÜN (YENİ ENDPOINT)
+@app.get("/api/planes-3d")
+def api_planes_3d():
+    planes = get_planes_3d()
+    if not planes:
+        return {"planes": [], "error": "Heç bir təyyarə tapılmadı."}
     return {"planes": planes}
