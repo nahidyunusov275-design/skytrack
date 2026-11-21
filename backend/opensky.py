@@ -2,7 +2,6 @@ import requests
 import time
 import random
 
-# ADSB.LOL API (Pulsuz, tokensiz, Render-də bloklanmır)
 ADSB_URL = "https://api.adsb.lol/v2/lat/40.4093/lon/49.8671/dist/250"
 
 _cache = {
@@ -32,7 +31,10 @@ def generate_fake_planes():
 
 def fetch_planes_from_adsb():
     try:
-        r = requests.get(ADSB_URL, timeout=15)
+        # Bəzi API-lər User-Agent olmadan bloklayır
+        headers = {'User-Agent': 'SkyTrack3D/1.0'}
+        r = requests.get(ADSB_URL, headers=headers, timeout=15)
+        
         if r.status_code == 200:
             data = r.json()
             states = data.get("ac", []) 
@@ -47,15 +49,13 @@ def fetch_planes_from_adsb():
                     "country": "Unknown",
                     "longitude": s.get("lon"),
                     "latitude": s.get("lat"),
-                    # Futdan metrə çeviririk
                     "altitude_m": round(s.get("alt_baro", 0) * 0.3048) if s.get("alt_baro") else 10000,
-                    # Düyündən m/s-ə çeviririk
                     "velocity_ms": round(s.get("gs", 0) * 0.514444) if s.get("gs") else 200,
                     "heading": s.get("track", 0),
                 })
             return planes
         else:
-            print(f"❌ ADSB.lol Xətası: {r.status_code}")
+            print(f"❌ ADSB.lol Xətası: HTTP {r.status_code}")
             return []
     except Exception as e:
         print(f"❌ Bağlantı xətası: {e}")
@@ -65,7 +65,6 @@ def get_planes():
     global _cache
     now = time.time()
     
-    # 15 saniyəlik keş
     if not _cache["data"] or (now - _cache["timestamp"] > 15):
         print("ADSB.lol-dan yeni data çəkilir...")
         new_data = fetch_planes_from_adsb()

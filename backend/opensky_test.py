@@ -4,7 +4,6 @@ from opensky import get_planes
 
 app = FastAPI()
 
-# CORS (React-in backend-ə qoşulması üçün MÜTLƏQDİR)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -15,7 +14,7 @@ app.add_middleware(
 
 @app.get("/api/planes")
 def api_planes():
+    print("--- API SORĞUSU GƏLDİ ---")
     planes = get_planes()
-    if not planes:
-        return {"planes": [], "error": "Heç bir təyyarə tapılmadı."}
+    print(f"--- QAYTARILAN TƏYYARƏ SAYI: {len(planes)} ---")
     return {"planes": planes}
