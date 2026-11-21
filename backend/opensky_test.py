@@ -1,13 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from opensky import get_planes # Yuxarıdakı faylı import edirik
+from opensky import get_planes
 
 app = FastAPI()
 
 # CORS (React-in backend-ə qoşulması üçün MÜTLƏQDİR)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # İnkişaf mərhələsində hər şeyə icazə veririk
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

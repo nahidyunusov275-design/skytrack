@@ -5,14 +5,6 @@ import './App.css'
 
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
 
-// 🛩️ MÜVƏQQƏTİ MOCK DATA (Backend düzələndə silinəcək)
-const MOCK_PLANES = [
-  { callsign: "THY123", latitude: 40.4093, longitude: 49.8671, altitude: 10000, heading: 90 },
-  { callsign: "AFL456", latitude: 41.0000, longitude: 48.0000, altitude: 11000, heading: 180 },
-  { callsign: "BAW789", latitude: 39.5000, longitude: 50.5000, altitude: 9000, heading: 270 },
-  { callsign: "AZA001", latitude: 40.2000, longitude: 47.5000, altitude: 12000, heading: 45 },
-];
-
 export default function App() {
   const viewerRef = useRef(null)
 
@@ -31,7 +23,7 @@ export default function App() {
       terrain: Cesium.Terrain.fromWorldTerrain()
     })
 
-    // Kamera Bakıya yönəlsin
+    // Kameranı Bakıya yönəlt
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(49.8671, 40.4093, 1500000),
       orientation: {
@@ -41,30 +33,54 @@ export default function App() {
       },
     })
 
-    // 🛩️ Təyyarələri Yer kürəsinə əlavə et
-    MOCK_PLANES.forEach((plane) => {
-      viewer.entities.add({
-        name: plane.callsign,
-        position: Cesium.Cartesian3.fromDegrees(plane.longitude, plane.latitude, plane.altitude),
-        point: {
-          pixelSize: 10,
-          color: Cesium.Color.CYAN,
-          outlineColor: Cesium.Color.WHITE,
-          outlineWidth: 2,
-        },
-        label: {
-          text: plane.callsign,
-          font: '12px monospace',
-          fillColor: Cesium.Color.WHITE,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          outlineWidth: 2,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: new Cesium.Cartesian2(0, -15),
+    // 🛩️ Backend-dən təyyarələri çəkən funksiya
+    const fetchAndDrawPlanes = async () => {
+      try {
+        const response = await fetch("https://skytrack-backend-j6az.onrender.com/api/planes")
+        const data = await response.json()
+        
+        // Hər yenilənmədə köhnə təyyarələri təmizlə
+        viewer.entities.removeAll()
+
+        if (data.planes && data.planes.length > 0) {
+          data.planes.forEach((plane) => {
+            viewer.entities.add({
+              name: plane.callsign,
+              position: Cesium.Cartesian3.fromDegrees(plane.longitude, plane.latitude, plane.altitude_m || 10000),
+              point: {
+                pixelSize: 8,
+                color: Cesium.Color.CYAN,
+                outlineColor: Cesium.Color.WHITE,
+                outlineWidth: 2,
+              },
+              label: {
+                text: plane.callsign,
+                font: '12px monospace',
+                fillColor: Cesium.Color.WHITE,
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                outlineWidth: 2,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -15),
+              }
+            })
+          })
+          console.log(`✅ ${data.planes.length} təyyarə çəkildi.`)
+        } else {
+          console.warn("⚠️ Backend boş data qaytardı:", data.error)
         }
-      })
-    })
+      } catch (error) {
+        console.error("❌ Backend-ə qoşulma xətası:", error)
+      }
+    }
+
+    // İlk dəfə işə sal
+    fetchAndDrawPlanes()
+
+    // Hər 15 saniyədən bir yenilə (Real vaxt effekti)
+    const intervalId = setInterval(fetchAndDrawPlanes, 15000)
 
     return () => {
+      clearInterval(intervalId)
       if (!viewer.isDestroyed()) viewer.destroy()
     }
   }, [])
@@ -74,7 +90,7 @@ export default function App() {
       <div ref={viewerRef} className="cesium-container" />
       <div className="hud">
         <h1>🌍 SkyTrack 3D</h1>
-        <p>Təyyarələr (Mock Data)</p>
+        <p>Real vaxt rejimində təyyarələr</p>
       </div>
     </div>
   )

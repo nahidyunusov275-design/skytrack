@@ -35,10 +35,9 @@ def fetch_planes_from_adsb():
         r = requests.get(ADSB_URL, timeout=15)
         if r.status_code == 200:
             data = r.json()
-            states = data.get("ac", []) # adsb.lol "ac" açarından istifadə edir
+            states = data.get("ac", []) 
             planes = []
             for s in states:
-                # Bəzi təyyarələrdə lat/lon olmaya bilər, onları keçirik
                 if "lat" not in s or "lon" not in s:
                     continue
                     
@@ -48,9 +47,9 @@ def fetch_planes_from_adsb():
                     "country": "Unknown",
                     "longitude": s.get("lon"),
                     "latitude": s.get("lat"),
-                    # Futdan metrə çeviririk (1 fut = 0.3048 metr)
+                    # Futdan metrə çeviririk
                     "altitude_m": round(s.get("alt_baro", 0) * 0.3048) if s.get("alt_baro") else 10000,
-                    # Düyündən m/s-ə çeviririk (1 knot = 0.514444 m/s)
+                    # Düyündən m/s-ə çeviririk
                     "velocity_ms": round(s.get("gs", 0) * 0.514444) if s.get("gs") else 200,
                     "heading": s.get("track", 0),
                 })
@@ -66,7 +65,7 @@ def get_planes():
     global _cache
     now = time.time()
     
-    # 15 saniyəlik keş (Real vaxt effekti üçün)
+    # 15 saniyəlik keş
     if not _cache["data"] or (now - _cache["timestamp"] > 15):
         print("ADSB.lol-dan yeni data çəkilir...")
         new_data = fetch_planes_from_adsb()
