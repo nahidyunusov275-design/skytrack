@@ -76,11 +76,14 @@ TRANSPORT_DATA = {
 
 AIRLABS_KEY = os.getenv("AIRLABS_API_KEY", "")
 
+# ============ KEŞ (YADDA SAXLAMA) ============
+LAST_PLANES = []  # Son uğurlu təyyarə siyahısını yadda saxlayır
+
 # ============ MÖVCUD ENDPOINT-LƏR ============
 
 @app.get("/api/planes")
 async def get_planes():
-    # 3 fərqli API yoxlayırıq (biri işləməsə, digəri işləyəcək)
+    global LAST_PLANES
     urls = [
         "https://api.airplanes.live/v2/point/40.0/47.5/250",
         "https://opendata.adsb.fi/api/v2/lat/40.0/lon/47.5/dist/250",
@@ -118,12 +121,16 @@ async def get_planes():
                                 "heading": ac.get("track", 0),
                                 "vertical_rate": vertical_rate,
                             })
+                    
+                    # Əgər təyyarə tapıldısa, keşi yenilə və qaytar
                     if planes:
+                        LAST_PLANES = planes
                         return {"planes": planes}
-            except Exception as e:
-                continue  # Xəta olsa, növbəti API-yə keç
+            except Exception:
+                continue
                 
-    return {"planes": [], "error": "Bütün API-lər uğursuz oldu və ya heç bir təyyarə tapılmadı."}
+    # Əgər bütün API-lər boş qaytardısa, KÖHNƏ siyahını qaytar
+    return {"planes": LAST_PLANES}
 
 @app.get("/api/flight-route/{callsign}")
 async def get_flight_route(callsign: str):

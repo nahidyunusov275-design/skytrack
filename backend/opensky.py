@@ -2,14 +2,8 @@ import requests
 import time
 import random
 
-OPENSKY_URL = "https://opensky-network.org/api/states/all"
-
-AZ_BBOX = {
-    "lamin": 38.0,
-    "lomin": 44.0,
-    "lamax": 42.0,
-    "lomax": 51.0,
-}
+# ADSB.LOL API (Pulsuz, tokensiz, Render-də bloklanmır)
+ADSB_URL = "https://api.adsb.lol/v2/lat/40.4093/lon/49.8671/dist/250"
 
 _cache = {
     "data": [],
@@ -36,26 +30,33 @@ def generate_fake_planes():
     print(f"✅ SİMULYASİYA BİTDİ: {len(fake_planes)} təyyarə yaradıldı.")
     return fake_planes
 
-def fetch_planes_from_opensky():
+def fetch_planes_from_adsb():
     try:
-        r = requests.get(OPENSKY_URL, params=AZ_BBOX, timeout=15)
+        r = requests.get(ADSB_URL, timeout=15)
         if r.status_code == 200:
-            states = r.json().get("states") or []
+            data = r.json()
+            states = data.get("ac", []) # adsb.lol "ac" açarından istifadə edir
             planes = []
             for s in states:
+                # Bəzi təyyarələrdə lat/lon olmaya bilər, onları keçirik
+                if "lat" not in s or "lon" not in s:
+                    continue
+                    
                 planes.append({
-                    "icao24": s[0],
-                    "callsign": (s[1] or "").strip() or "Naməlum",
-                    "country": s[2] or "Naməlum",
-                    "longitude": s[5],
-                    "latitude": s[6],
-                    "altitude_m": round(s[7]) if s[7] is not None else None,
-                    "velocity_ms": round(s[9]) if s[9] is not None else None,
-                    "heading": round(s[10]) if s[10] is not None else None,
+                    "icao24": s.get("hex", "unknown"),
+                    "callsign": (s.get("flight") or "").strip() or "Naməlum",
+                    "country": "Unknown",
+                    "longitude": s.get("lon"),
+                    "latitude": s.get("lat"),
+                    # Futdan metrə çeviririk (1 fut = 0.3048 metr)
+                    "altitude_m": round(s.get("alt_baro", 0) * 0.3048) if s.get("alt_baro") else 10000,
+                    # Düyündən m/s-ə çeviririk (1 knot = 0.514444 m/s)
+                    "velocity_ms": round(s.get("gs", 0) * 0.514444) if s.get("gs") else 200,
+                    "heading": s.get("track", 0),
                 })
             return planes
         else:
-            print(f"❌ OpenSky Xətası: {r.status_code}")
+            print(f"❌ ADSB.lol Xətası: {r.status_code}")
             return []
     except Exception as e:
         print(f"❌ Bağlantı xətası: {e}")
@@ -65,16 +66,17 @@ def get_planes():
     global _cache
     now = time.time()
     
-    if not _cache["data"] or (now - _cache["timestamp"] > 60):
-        print("OpenSky-dən yeni data çəkilir...")
-        new_data = fetch_planes_from_opensky()
+    # 15 saniyəlik keş (Real vaxt effekti üçün)
+    if not _cache["data"] or (now - _cache["timestamp"] > 15):
+        print("ADSB.lol-dan yeni data çəkilir...")
+        new_data = fetch_planes_from_adsb()
         
         if new_data: 
             _cache["data"] = new_data
             _cache["timestamp"] = now
-            print(f"✅ OpenSky-dən {len(new_data)} təyyarə gəldi.")
+            print(f"✅ Real datadan {len(new_data)} təyyarə gəldi.")
         else:
-            print("⚠️ OpenSky data vermədi. Simulyasiya (fallback) işə düşür.")
+            print("⚠️ Real data gəlmədi. Simulyasiya (fallback) işə düşür.")
             _cache["data"] = generate_fake_planes()
             _cache["timestamp"] = now
             

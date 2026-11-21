@@ -1,0 +1,47 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.app-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.cesium-container {
+  width: 100%;
+  height: 100%;
+}
+
+.hud {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(10, 20, 40, 0.75);
+  color: #fff;
+  padding: 16px 24px;
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(100, 200, 255, 0.3);
+  z-index: 100;
+}
+
+.hud h1 {
+  font-size: 20px;
+  margin-bottom: 4px;
+  color: #64c8ff;
+}
+
+.hud p {
+  font-size: 13px;
+  color: #a0c0e0;
+}
