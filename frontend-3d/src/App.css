@@ -45,3 +45,30 @@ html, body, #root {
   font-size: 13px;
   color: #a0c0e0;
 }
+.info-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 20, 40, 0.92);
+  border: 1px solid #00d4ff;
+  border-radius: 10px;
+  padding: 16px 20px;
+  color: white;
+  min-width: 260px;
+  font-family: monospace;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
+}
+.info-panel h2 { margin: 0 0 12px 0; color: #00d4ff; font-size: 16px; }
+.info-panel p { margin: 6px 0; font-size: 13px; }
+.close-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+}
+.close-btn:hover { color: #ff5555; }
