@@ -2,7 +2,6 @@ import requests
 import time
 import random
 
-# OpenSky API (Bakı ətrafı üçün)
 ADSB_URL = "https://opensky-network.org/api/states/all?lamin=38.5&lomin=44.5&lamax=41.5&lomax=50.5"
 _cache = {"data": [], "timestamp": 0}
 _last_error = ""
@@ -20,6 +19,8 @@ def generate_fake_planes():
             "altitude_m": random.randint(5000, 12000),
             "velocity_ms": random.randint(150, 280),
             "heading": random.randint(0, 359),
+            "vertical_rate": 0,
+            "on_ground": False,
         })
     return fake_planes
 
@@ -34,7 +35,6 @@ def fetch_planes_from_adsb():
             planes = []
             if states:
                 for s in states:
-                    # OpenSky formatı: [icao24, callsign, country, ..., lon(5), lat(6), alt(7), ..., vel(9), heading(10)]
                     if s[5] is None or s[6] is None:
                         continue
                     planes.append({
@@ -46,6 +46,8 @@ def fetch_planes_from_adsb():
                         "altitude_m": round(s[7]) if s[7] else 0,
                         "velocity_ms": round(s[9]) if s[9] else 0,
                         "heading": s[10] if s[10] else 0,
+                        "vertical_rate": s[11] if s[11] else 0, # YENİ
+                        "on_ground": s[8] if s[8] is not None else False, # YENİ
                     })
             _last_error = "Uğurlu"
             return planes
