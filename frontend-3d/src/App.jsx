@@ -3,7 +3,7 @@ import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import './App.css'
 
-Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
+Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6Ik5MQ3oxdXNMVmJEVnNFY1IiLCJqdGkiOiJkMjQ4YTU2";
 
 export default function App() {
   const viewerRef = useRef(null)
