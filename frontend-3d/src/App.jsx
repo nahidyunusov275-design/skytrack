@@ -3,7 +3,7 @@ import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import './App.css'
 
-Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6Ik5MQ3oxdXNMVmJEVnNFY1IiLCJqdGkiOiJkMjQ4YTU2";
+Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IkxnV2Z0NEttQWtYNnh3WWIiLCJqdGkiOiIxYzU0NThjYS1iZDBiLTQzNDYtYTQ5Mi1hYzhhMGQwYzNkNmQiLCJpZCI6NTUwODczLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3OTQ4NTczMzd9.ZEEO9u5tDjaaYShCOeeI_7WsKMDlR-kGsYL8y4-GjGM";
 
 export default function App() {
   const viewerRef = useRef(null)
