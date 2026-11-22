@@ -2,7 +2,8 @@ import requests
 import time
 import random
 
-ADSB_URL = "https://opensky-network.org/api/states/all?lamin=38.5&lomin=44.5&lamax=41.5&lomax=50.5"
+# ADSB.fi API (Limitsiz və Cloudflare bloku yoxdur)
+ADSB_URL = "https://opendata.adsb.fi/api/v2/lat/40.4093/lon/49.8671/dist/250"
 _cache = {"data": [], "timestamp": 0}
 _last_error = ""
 
@@ -31,37 +32,43 @@ def fetch_planes_from_adsb():
         r = requests.get(ADSB_URL, headers=headers, timeout=15)
         if r.status_code == 200:
             data = r.json()
-            states = data.get("states", [])
+            states = data.get("ac", [])
             planes = []
-            if states:
-                for s in states:
-                    if s[5] is None or s[6] is None:
-                        continue
-                    planes.append({
-                        "icao24": s[0],
-                        "callsign": s[1].strip() if s[1] else "Naməlum",
-                        "country": s[2],
-                        "longitude": s[5],
-                        "latitude": s[6],
-                        "altitude_m": round(s[7]) if s[7] else 0,
-                        "velocity_ms": round(s[9]) if s[9] else 0,
-                        "heading": s[10] if s[10] else 0,
-                        "vertical_rate": s[11] if s[11] else 0, # YENİ
-                        "on_ground": s[8] if s[8] is not None else False, # YENİ
-                    })
-            _last_error = "Uğurlu"
+            for s in states:
+                if "lat" not in s or "lon" not in s:
+                    continue
+                
+                alt_baro = s.get("alt_baro")
+                altitude = round(alt_baro * 0.3048) if isinstance(alt_baro, (int, float)) else 0
+                gs = s.get("gs")
+                velocity = round(gs * 0.514444) if isinstance(gs, (int, float)) else 0
+
+                planes.append({
+                    "icao24": s.get("hex", "unknown"),
+                    "callsign": (s.get("flight") or "").strip() or "Naməlum",
+                    "country": "Unknown",
+                    "longitude": s.get("lon"),
+                    "latitude": s.get("lat"),
+                    "altitude_m": altitude,
+                    "velocity_ms": velocity,
+                    "heading": s.get("track", 0),
+                    "vertical_rate": s.get("baro_rate", 0), # Enmə/Qalxma sürəti
+                    "on_ground": altitude == 0,
+                })
+            _last_error = "Uğurlu (ADSB.fi)"
             return planes
         else:
-            _last_error = f"Status xətası: {r.status_code}"
+            _last_error = f"ADSB.fi Status xətası: {r.status_code}"
             return []
     except Exception as e:
-        _last_error = f"Qoşulma xətası: {str(e)}"
+        _last_error = f"ADSB.fi Qoşulma xətası: {str(e)}"
         return []
 
 def get_planes_3d():
     global _cache, _last_error
     now = time.time()
-    if not _cache["data"] or (now - _cache["timestamp"] > 15):
+    # Keş müddətini 60 saniyə etdik ki, API-ni yormayaq
+    if not _cache["data"] or (now - _cache["timestamp"] > 60):
         new_data = fetch_planes_from_adsb()
         if not new_data:
             new_data = generate_fake_planes()
