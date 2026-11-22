@@ -32,19 +32,37 @@ def fetch_planes_from_adsb():
             for s in states:
                 if "lat" not in s or "lon" not in s:
                     continue
+                
+                # Hündürlüyü təhlükəsiz yoxlayırıq (bəzən "ground" gəlir)
+                alt_baro = s.get("alt_baro")
+                if isinstance(alt_baro, (int, float)):
+                    altitude = round(alt_baro * 0.3048)
+                else:
+                    altitude = 0  # Yerdədirsə və ya məlumat yoxdursa
+
+                # Sürəti təhlükəsiz yoxlayırıq
+                gs = s.get("gs")
+                if isinstance(gs, (int, float)):
+                    velocity = round(gs * 0.514444)
+                else:
+                    velocity = 0
+
                 planes.append({
                     "icao24": s.get("hex", "unknown"),
                     "callsign": (s.get("flight") or "").strip() or "Naməlum",
                     "country": "Unknown",
                     "longitude": s.get("lon"),
                     "latitude": s.get("lat"),
-                    "altitude_m": round(s.get("alt_baro", 0) * 0.3048) if s.get("alt_baro") else 10000,
-                    "velocity_ms": round(s.get("gs", 0) * 0.514444) if s.get("gs") else 200,
+                    "altitude_m": altitude,
+                    "velocity_ms": velocity,
                     "heading": s.get("track", 0),
                 })
             return planes
-        return []
-    except Exception:
+        else:
+            print(f"ADSB API xətası: Status {r.status_code}")
+            return []
+    except Exception as e:
+        print(f"ADSB API-yə qoşulma xətası: {e}")
         return []
 
 def get_planes_3d():
