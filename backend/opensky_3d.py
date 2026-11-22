@@ -2,8 +2,10 @@ import requests
 import time
 import random
 
-ADSB_URL = "https://api.adsb.lol/v2/lat/40.4093/lon/49.8671/dist/250"
+# OpenSky API (Bakı ətrafı üçün)
+ADSB_URL = "https://opensky-network.org/api/states/all?lamin=38.5&lomin=44.5&lamax=41.5&lomax=50.5"
 _cache = {"data": [], "timestamp": 0}
+_last_error = ""
 
 def generate_fake_planes():
     fake_planes = []
@@ -22,51 +24,40 @@ def generate_fake_planes():
     return fake_planes
 
 def fetch_planes_from_adsb():
+    global _last_error
     try:
         headers = {'User-Agent': 'SkyTrack3D/1.0'}
         r = requests.get(ADSB_URL, headers=headers, timeout=15)
         if r.status_code == 200:
             data = r.json()
-            states = data.get("ac", []) 
+            states = data.get("states", [])
             planes = []
-            for s in states:
-                if "lat" not in s or "lon" not in s:
-                    continue
-                
-                # Hündürlüyü təhlükəsiz yoxlayırıq (bəzən "ground" gəlir)
-                alt_baro = s.get("alt_baro")
-                if isinstance(alt_baro, (int, float)):
-                    altitude = round(alt_baro * 0.3048)
-                else:
-                    altitude = 0  # Yerdədirsə və ya məlumat yoxdursa
-
-                # Sürəti təhlükəsiz yoxlayırıq
-                gs = s.get("gs")
-                if isinstance(gs, (int, float)):
-                    velocity = round(gs * 0.514444)
-                else:
-                    velocity = 0
-
-                planes.append({
-                    "icao24": s.get("hex", "unknown"),
-                    "callsign": (s.get("flight") or "").strip() or "Naməlum",
-                    "country": "Unknown",
-                    "longitude": s.get("lon"),
-                    "latitude": s.get("lat"),
-                    "altitude_m": altitude,
-                    "velocity_ms": velocity,
-                    "heading": s.get("track", 0),
-                })
+            if states:
+                for s in states:
+                    # OpenSky formatı: [icao24, callsign, country, ..., lon(5), lat(6), alt(7), ..., vel(9), heading(10)]
+                    if s[5] is None or s[6] is None:
+                        continue
+                    planes.append({
+                        "icao24": s[0],
+                        "callsign": s[1].strip() if s[1] else "Naməlum",
+                        "country": s[2],
+                        "longitude": s[5],
+                        "latitude": s[6],
+                        "altitude_m": round(s[7]) if s[7] else 0,
+                        "velocity_ms": round(s[9]) if s[9] else 0,
+                        "heading": s[10] if s[10] else 0,
+                    })
+            _last_error = "Uğurlu"
             return planes
         else:
-            print(f"ADSB API xətası: Status {r.status_code}")
+            _last_error = f"Status xətası: {r.status_code}"
             return []
     except Exception as e:
-        print(f"ADSB API-yə qoşulma xətası: {e}")
+        _last_error = f"Qoşulma xətası: {str(e)}"
         return []
 
 def get_planes_3d():
-    global _cache
+    global _cache, _last_error
     now = time.time()
     if not _cache["data"] or (now - _cache["timestamp"] > 15):
         new_data = fetch_planes_from_adsb()
@@ -74,4 +65,4 @@ def get_planes_3d():
             new_data = generate_fake_planes()
         _cache["data"] = new_data
         _cache["timestamp"] = now
-    return _cache["data"]
+    return _cache["data"], _last_error

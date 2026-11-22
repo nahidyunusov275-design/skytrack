@@ -22,5 +22,5 @@ def api_planes():
 # 3D üçün
 @app.get("/api/planes-3d")
 def api_planes_3d():
-    planes = get_planes_3d()
-    return {"planes": planes}
+    planes, error = get_planes_3d()
+    return {"planes": planes, "debug_error": error}
