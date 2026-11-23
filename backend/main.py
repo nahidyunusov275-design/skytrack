@@ -93,16 +93,34 @@ def find_target_airport(lat, lon, heading):
 def classify_plane(alt, speed, target):
     if alt is None: alt = 0
     if speed is None: speed = 0
-    if alt < 500 or speed < 50:
+
+    # GROUND: yalnız həm alçaq, həm yavaş
+    if alt < 500 and speed < 50:
         return "ground"
+
+    # Hədəf yoxdursa → tranzit
     if target is None:
         return "cruise"
-    if alt < 10000 and target["bearing_diff"] < 60:
+
+    dist = target["distance_nm"]
+    diff = target["bearing_diff"]
+
+    # LANDING: son yaxınlaşma (10,000 ft altı, 30 NM içi)
+    if alt < 10000 and diff < 60 and dist < 30:
         return "landing"
-    if alt < 20000 and target["bearing_diff"] < 90:
+
+    # APPROACH: ilkin yaxınlaşma (20,000 ft altı, 100 NM içi)
+    if alt < 20000 and diff < 90 and dist < 100:
         return "approach"
-    if alt < 30000 and target["bearing_diff"] < 60:
+
+    # DESCENDING: enmə fazası (30,000 ft altı, 150 NM içi)
+    if alt < 30000 and diff < 60 and dist < 150:
         return "descending"
+
+    # INBOUND: cruise-da amma AZ-a gəlir (yeni!)
+    if diff < 30 and dist < 200:
+        return "inbound"
+
     return "cruise"
 
 def calculate_eta(distance_nm, groundspeed_kts):
