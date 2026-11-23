@@ -16,7 +16,7 @@ app.add_middleware(
 
 # ---------- CACHE ----------
 _cache = {}
-CACHE_TTL = 300  # 5 minutes (opensky limitini qorumaq üçün)
+CACHE_TTL = 300  # 5 dəqiqə
 
 def get_cache(key):
     if key in _cache:
@@ -123,17 +123,23 @@ async def fetch_adsb_lol(client, lat, lon, radius_nm):
     r.raise_for_status()
     return r.json().get("ac", []), "adsb.lol"
 
+async def fetch_adsb_one(client, lat, lon, radius_nm):
+    url = f"https://api.adsb.one/v2/point/{lat}/{lon}/{radius_nm}"
+    r = await client.get(url, timeout=10)
+    r.raise_for_status()
+    return r.json().get("ac", []), "adsb.one"
+
 async def fetch_airplanes_live(client, lat, lon, radius_nm):
     url = f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius_nm}"
     r = await client.get(url, timeout=10)
     r.raise_for_status()
     return r.json().get("ac", []), "airplanes.live"
 
-async def fetch_adsb_one(client, lat, lon, radius_nm):
-    url = f"https://api.adsb.one/v2/point/{lat}/{lon}/{radius_nm}"
+async def fetch_adsb_fi(client, lat, lon, radius_nm):
+    url = f"https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius_nm}"
     r = await client.get(url, timeout=10)
     r.raise_for_status()
-    return r.json().get("ac", []), "adsb.one"
+    return r.json().get("aircraft", []), "adsb.fi"
 
 async def fetch_opensky(client, lat, lon, radius_nm):
     dlat = radius_nm / 60.0
@@ -198,7 +204,7 @@ async def fetch_planes(lat, lon, radius_nm):
 # ---------- ENDPOINTS ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.4"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.5"}
 
 @app.get("/api/planes-3d")
 async def planes_3d():
