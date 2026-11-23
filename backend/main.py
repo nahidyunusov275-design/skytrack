@@ -16,7 +16,7 @@ app.add_middleware(
 
 # ---------- CACHE ----------
 _cache = {}
-CACHE_TTL = 60  # 60 saniyə (opensky limitini qorumaq üçün)
+CACHE_TTL = 300  # 5 minutes (opensky limitini qorumaq üçün)
 
 def get_cache(key):
     if key in _cache:
@@ -113,6 +113,7 @@ def calculate_eta(distance_nm, groundspeed_kts):
 
 # ---------- API FALLBACK ----------
 HEADERS = {
+    "User-Agent": "SkyTrack/1.0 (https://skytrack-backend-j6az.onrender.com)",
     "Accept": "application/json",
 }
 
@@ -128,11 +129,11 @@ async def fetch_airplanes_live(client, lat, lon, radius_nm):
     r.raise_for_status()
     return r.json().get("ac", []), "airplanes.live"
 
-async def fetch_adsb_fi(client, lat, lon, radius_nm):
-    url = f"https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius_nm}"
+async def fetch_adsb_one(client, lat, lon, radius_nm):
+    url = f"https://api.adsb.one/v2/point/{lat}/{lon}/{radius_nm}"
     r = await client.get(url, timeout=10)
     r.raise_for_status()
-    return r.json().get("aircraft", []), "adsb.fi"
+    return r.json().get("ac", []), "adsb.one"
 
 async def fetch_opensky(client, lat, lon, radius_nm):
     dlat = radius_nm / 60.0
@@ -169,7 +170,7 @@ async def fetch_planes(lat, lon, radius_nm):
         sources_used = []
 
         async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-            for fetcher in [fetch_adsb_lol, fetch_airplanes_live, fetch_adsb_fi, fetch_opensky]:
+            for fetcher in [fetch_adsb_lol, fetch_adsb_one, fetch_adsb_fi, fetch_airplanes_live, fetch_opensky]:
                 try:
                     planes, source = await fetcher(client, lat, lon, radius_nm)
                     if planes:
