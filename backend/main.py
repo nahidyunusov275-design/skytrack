@@ -16,7 +16,7 @@ app.add_middleware(
 
 # ---------- CACHE ----------
 _cache = {}
-CACHE_TTL = 10
+CACHE_TTL = 60  # 60 saniyə (opensky limitini qorumaq üçün)
 
 def get_cache(key):
     if key in _cache:
@@ -112,7 +112,6 @@ def calculate_eta(distance_nm, groundspeed_kts):
     return round((distance_nm / groundspeed_kts) * 60, 1)
 
 # ---------- API FALLBACK ----------
-# User-Agent əlavə edildi ki, API-lər Render IP-sini bloklamasın
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/json",
@@ -134,7 +133,6 @@ async def fetch_adsb_fi(client, lat, lon, radius_nm):
     url = f"https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius_nm}"
     r = await client.get(url, timeout=10)
     r.raise_for_status()
-    # DÜZƏLİŞ: "ac" deyil, "aircraft" açarı ilə gəlir
     return r.json().get("aircraft", []), "adsb.fi"
 
 async def fetch_opensky(client, lat, lon, radius_nm):
@@ -162,43 +160,45 @@ async def fetch_opensky(client, lat, lon, radius_nm):
     return planes, "opensky"
 
 async def fetch_planes(lat, lon, radius_nm):
-    cache_key = f"planes:{lat}:{lon}:{radius_nm}"
-    cached = get_cache(cache_key)
-    if cached:
-        return cached
+    try:
+        cache_key = f"planes:{lat}:{lon}:{radius_nm}"
+        cached = get_cache(cache_key)
+        if cached:
+            return cached
 
-    all_planes = {}
-    sources_used = []
+        all_planes = {}
+        sources_used = []
 
-    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-        for fetcher in [fetch_adsb_lol, fetch_airplanes_live, fetch_adsb_fi, fetch_opensky]:
-            try:
-                planes, source = await fetcher(client, lat, lon, radius_nm)
-                if planes:
-                    sources_used.append(f"{source}({len(planes)})")
-                    for p in planes:
-                        hex_id = p.get("hex")
-                        if hex_id and hex_id not in all_planes:
-                            all_planes[hex_id] = p
-                else:
-                    print(f"⚠️ {fetcher.__name__} boş qaytardı")
-            except Exception as e:
-                print(f"❌ {fetcher.__name__} failed: {e}")
-                continue
+        async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
+            for fetcher in [fetch_adsb_lol, fetch_airplanes_live, fetch_adsb_fi, fetch_opensky]:
+                try:
+                    planes, source = await fetcher(client, lat, lon, radius_nm)
+                    if planes:
+                        sources_used.append(f"{source}({len(planes)})")
+                        for p in planes:
+                            hex_id = p.get("hex")
+                            if hex_id and hex_id not in all_planes:
+                                all_planes[hex_id] = p
+                except Exception as e:
+                    print(f"❌ {fetcher.__name__} failed: {e}")
+                    continue
 
-    merged_planes = list(all_planes.values())
-    result = {
-        "source": " + ".join(sources_used) if sources_used else "none",
-        "count": len(merged_planes),
-        "planes": merged_planes,
-    }
-    set_cache(cache_key, result)
-    return result
+        merged_planes = list(all_planes.values())
+        result = {
+            "source": " + ".join(sources_used) if sources_used else "none",
+            "count": len(merged_planes),
+            "planes": merged_planes,
+        }
+        set_cache(cache_key, result)
+        return result
+    except Exception as e:
+        print(f"❌❌❌ fetch_planes CRASH: {e}")
+        return {"source": "error", "count": 0, "planes": []}
 
 # ---------- ENDPOINTS ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.3"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.4"}
 
 @app.get("/api/planes-3d")
 async def planes_3d():
