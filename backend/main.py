@@ -66,18 +66,18 @@ def bearing(lat1, lon1, lat2, lon2):
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 def find_target_airport(lat, lon, heading):
-    """İstiqamətə uyğun hava limanını tap"""
+    """İstiqamətə uyğun hava limanını tap. heading yoxdursa → None"""
+    if heading is None:
+        return None
+
     best, best_score = None, float('inf')
     for code, ap in AZ_AIRPORTS.items():
         dist_km = haversine(lat, lon, ap["lat"], ap["lon"])
         dist_nm = dist_km / 1.852
-        if heading is not None:
-            brg = bearing(lat, lon, ap["lat"], ap["lon"])
-            diff = abs((heading - brg + 180) % 360 - 180)
-            if diff > 100:
-                continue
-        else:
-            diff = 0
+        brg = bearing(lat, lon, ap["lat"], ap["lon"])
+        diff = abs((heading - brg + 180) % 360 - 180)
+        if diff > 100:
+            continue
         score = dist_nm + diff * 0.5
         if score < best_score:
             best_score = score
@@ -117,7 +117,7 @@ def classify_plane(alt, speed, target):
     if alt < 30000 and diff < 60 and dist < 150:
         return "descending"
 
-    # INBOUND: cruise-da amma AZ-a gəlir (yeni!)
+    # INBOUND: cruise-da amma AZ-a gəlir
     if diff < 30 and dist < 200:
         return "inbound"
 
@@ -196,7 +196,7 @@ async def fetch_planes(lat, lon, radius_nm):
 # ---------- ENDPOINTS ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.1"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.2"}
 
 @app.get("/api/planes-3d")
 async def planes_3d():
@@ -226,8 +226,9 @@ async def planes_az(status: str = None):
         if status and plane_status != status:
             continue
 
+        # ETA: landing, approach, descending, inbound üçün
         eta = None
-        if target and plane_status in ("landing", "approach", "descending"):
+        if target and plane_status in ("landing", "approach", "descending", "inbound"):
             eta = calculate_eta(target["distance_nm"], speed)
 
         enriched.append({
@@ -248,12 +249,19 @@ async def planes_az(status: str = None):
             "eta_minutes": eta,
         })
 
-    order = {"landing": 0, "approach": 1, "descending": 2, "cruise": 3, "ground": 4}
-    enriched.sort(key=lambda x: (order.get(x["status"], 5), x["eta_minutes"] or 99999))
+    # Sıralama: landing → approach → descending → inbound → cruise → ground
+    order = {"landing": 0, "approach": 1, "descending": 2, "inbound": 3, "cruise": 4, "ground": 5}
+    enriched.sort(key=lambda x: (order.get(x["status"], 6), x["eta_minutes"] or 99999))
+
+    # Debug: hər statusdan neçə var
+    counts = {}
+    for p in enriched:
+        counts[p["status"]] = counts.get(p["status"], 0) + 1
 
     return {
         "source": result["source"],
         "count": len(enriched),
+        "counts": counts,
         "landing_count": sum(1 for p in enriched if p["status"] in ("landing", "approach")),
         "planes": enriched,
     }
