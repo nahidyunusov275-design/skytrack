@@ -167,22 +167,33 @@ async def fetch_planes(lat, lon, radius_nm):
     if cached:
         return cached
 
-    # DÜZƏLİŞ: headers əlavə edildi
+    all_planes = {}
+    sources_used = []
+
     async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
         for fetcher in [fetch_adsb_lol, fetch_airplanes_live, fetch_adsb_fi, fetch_opensky]:
             try:
                 planes, source = await fetcher(client, lat, lon, radius_nm)
                 if planes:
-                    result = {"source": source, "count": len(planes), "planes": planes}
-                    set_cache(cache_key, result)
-                    return result
+                    sources_used.append(f"{source}({len(planes)})")
+                    for p in planes:
+                        hex_id = p.get("hex")
+                        if hex_id and hex_id not in all_planes:
+                            all_planes[hex_id] = p
                 else:
                     print(f"⚠️ {fetcher.__name__} boş qaytardı")
             except Exception as e:
                 print(f"❌ {fetcher.__name__} failed: {e}")
                 continue
 
-    return {"source": "none", "count": 0, "planes": []}
+    merged_planes = list(all_planes.values())
+    result = {
+        "source": " + ".join(sources_used) if sources_used else "none",
+        "count": len(merged_planes),
+        "planes": merged_planes,
+    }
+    set_cache(cache_key, result)
+    return result
 
 # ---------- ENDPOINTS ----------
 @app.get("/")
