@@ -43,7 +43,6 @@ RADIUS_NM = 400
 
 # ---------- HELPERS ----------
 def _get(p, *keys):
-    """Hər iki field adı konvensiyası ilə işləyir"""
     for k in keys:
         v = p.get(k)
         if v is not None:
@@ -66,10 +65,8 @@ def bearing(lat1, lon1, lat2, lon2):
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 def find_target_airport(lat, lon, heading):
-    """İstiqamətə uyğun hava limanını tap. heading yoxdursa → None"""
     if heading is None:
         return None
-
     best, best_score = None, float('inf')
     for code, ap in AZ_AIRPORTS.items():
         dist_km = haversine(lat, lon, ap["lat"], ap["lon"])
@@ -93,34 +90,20 @@ def find_target_airport(lat, lon, heading):
 def classify_plane(alt, speed, target):
     if alt is None: alt = 0
     if speed is None: speed = 0
-
-    # GROUND: yalnız həm alçaq, həm yavaş
     if alt < 500 and speed < 50:
         return "ground"
-
-    # Hədəf yoxdursa → tranzit
     if target is None:
         return "cruise"
-
     dist = target["distance_nm"]
     diff = target["bearing_diff"]
-
-    # LANDING: son yaxınlaşma (10,000 ft altı, 30 NM içi)
     if alt < 10000 and diff < 60 and dist < 30:
         return "landing"
-
-    # APPROACH: ilkin yaxınlaşma (20,000 ft altı, 100 NM içi)
     if alt < 20000 and diff < 90 and dist < 100:
         return "approach"
-
-    # DESCENDING: enmə fazası (30,000 ft altı, 150 NM içi)
     if alt < 30000 and diff < 60 and dist < 150:
         return "descending"
-
-    # INBOUND: cruise-da amma AZ-a gəlir
     if diff < 30 and dist < 200:
         return "inbound"
-
     return "cruise"
 
 def calculate_eta(distance_nm, groundspeed_kts):
@@ -129,6 +112,12 @@ def calculate_eta(distance_nm, groundspeed_kts):
     return round((distance_nm / groundspeed_kts) * 60, 1)
 
 # ---------- API FALLBACK ----------
+# User-Agent əlavə edildi ki, API-lər Render IP-sini bloklamasın
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json",
+}
+
 async def fetch_adsb_lol(client, lat, lon, radius_nm):
     url = f"https://api.adsb.lol/v2/point/{lat}/{lon}/{radius_nm}"
     r = await client.get(url, timeout=10)
@@ -145,7 +134,8 @@ async def fetch_adsb_fi(client, lat, lon, radius_nm):
     url = f"https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius_nm}"
     r = await client.get(url, timeout=10)
     r.raise_for_status()
-    return r.json().get("ac", []), "adsb.fi"
+    # DÜZƏLİŞ: "ac" deyil, "aircraft" açarı ilə gəlir
+    return r.json().get("aircraft", []), "adsb.fi"
 
 async def fetch_opensky(client, lat, lon, radius_nm):
     dlat = radius_nm / 60.0
@@ -157,16 +147,14 @@ async def fetch_opensky(client, lat, lon, radius_nm):
     states = r.json().get("states") or []
     planes = []
     for s in states:
-        # Hər iki mənbə METRDƏDİR → həmişə FUT-a çevir
         alt_m = s[13] if s[13] is not None else s[7]
         alt_ft = round(alt_m * 3.28084, 1) if alt_m is not None else None
-
         planes.append({
             "hex": s[0],
             "callsign": (s[1] or "").strip(),
             "lat": s[6],
             "lon": s[5],
-            "alt": alt_ft,  # ← HƏMİŞƏ FUT
+            "alt": alt_ft,
             "speed": round(s[9] * 1.94384, 1) if s[9] else None,
             "heading": s[10],
             "country": s[2],
@@ -179,7 +167,8 @@ async def fetch_planes(lat, lon, radius_nm):
     if cached:
         return cached
 
-    async with httpx.AsyncClient() as client:
+    # DÜZƏLİŞ: headers əlavə edildi
+    async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
         for fetcher in [fetch_adsb_lol, fetch_airplanes_live, fetch_adsb_fi, fetch_opensky]:
             try:
                 planes, source = await fetcher(client, lat, lon, radius_nm)
@@ -187,8 +176,10 @@ async def fetch_planes(lat, lon, radius_nm):
                     result = {"source": source, "count": len(planes), "planes": planes}
                     set_cache(cache_key, result)
                     return result
+                else:
+                    print(f"⚠️ {fetcher.__name__} boş qaytardı")
             except Exception as e:
-                print(f"⚠️ {fetcher.__name__} failed: {e}")
+                print(f"❌ {fetcher.__name__} failed: {e}")
                 continue
 
     return {"source": "none", "count": 0, "planes": []}
@@ -196,7 +187,7 @@ async def fetch_planes(lat, lon, radius_nm):
 # ---------- ENDPOINTS ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.2"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.3"}
 
 @app.get("/api/planes-3d")
 async def planes_3d():
@@ -226,14 +217,13 @@ async def planes_az(status: str = None):
         if status and plane_status != status:
             continue
 
-        # ETA: landing, approach, descending, inbound üçün
         eta = None
         if target and plane_status in ("landing", "approach", "descending", "inbound"):
             eta = calculate_eta(target["distance_nm"], speed)
 
         enriched.append({
             "hex": p.get("hex"),
-            "callsign": callsign,
+            "callsign": callsign.strip() if isinstance(callsign, str) else callsign,
             "lat": lat,
             "lon": lon,
             "alt": alt,
@@ -249,11 +239,9 @@ async def planes_az(status: str = None):
             "eta_minutes": eta,
         })
 
-    # Sıralama: landing → approach → descending → inbound → cruise → ground
     order = {"landing": 0, "approach": 1, "descending": 2, "inbound": 3, "cruise": 4, "ground": 5}
     enriched.sort(key=lambda x: (order.get(x["status"], 6), x["eta_minutes"] or 99999))
 
-    # Debug: hər statusdan neçə var
     counts = {}
     for p in enriched:
         counts[p["status"]] = counts.get(p["status"], 0) + 1

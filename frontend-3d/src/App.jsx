@@ -10,7 +10,21 @@ Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZS
 const planeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M21,16V14L13,9V3.5A1.5,1.5 0 0,0 11.5,2A1.5,1.5 0 0,0 10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z"/></svg>`;
 const planeIconUrl = 'data:image/svg+xml;base64,' + btoa(planeSvg);
 
+// Hava limanı ikonu (Dairə)
+const airportSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#00d4ff"><circle cx="12" cy="12" r="8" stroke="white" stroke-width="2"/></svg>`;
+const airportIconUrl = 'data:image/svg+xml;base64,' + btoa(airportSvg);
+
 const FEET_TO_METERS = 0.3048;
+
+// Azərbaycan Hava Limanları
+const AZ_AIRPORTS = {
+  GYD: { name: 'Bakı', lat: 40.4675, lon: 50.0467 },
+  NAJ: { name: 'Naxçıvan', lat: 39.1888, lon: 45.4584 },
+  GAN: { name: 'Gəncə', lat: 40.7377, lon: 46.3176 },
+  LLK: { name: 'Lənkəran', lat: 38.7464, lon: 48.8180 },
+  GBB: { name: 'Qəbələ', lat: 40.8267, lon: 47.7125 },
+  ZTU: { name: 'Zaqatala', lat: 41.5622, lon: 46.6672 },
+};
 
 // Status rəngləri
 const STATUS_COLORS = {
@@ -37,20 +51,17 @@ export default function App() {
   const planesMapRef = useRef(new Map())
   const [selectedPlane, setSelectedPlane] = useState(null)
 
-  // Panel-dən klikləyəndə xəritədə fokuslan
   const focusOnPlane = (plane) => {
     const viewer = viewerInstanceRef.current;
-    if (!viewer || viewer.isDestroyed() || plane.lat == null || plane.lon == null) return;
-    const altMeters = (plane.alt ?? 10000) * FEET_TO_METERS;
-    viewer.camera.flyTo({
-      destination: Cesium.Cartesian3.fromDegrees(plane.lon, plane.lat, altMeters + 80000),
-      orientation: {
-        heading: 0,
-        pitch: Cesium.Math.toRadians(-60),
-        roll: 0,
-      },
-      duration: 1.5,
-    });
+    if (!viewer || viewer.isDestroyed()) return;
+    
+    const entity = viewer.entities.getById(plane.hex);
+    if (entity) {
+      viewer.flyTo(entity, {
+        duration: 1.5,
+        offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), 30000)
+      });
+    }
   }
 
   useEffect(() => {
@@ -83,6 +94,32 @@ export default function App() {
         viewer.entities.removeAll()
         planesMapRef.current.clear()
 
+        // 1. HAVA LİMANLARINI ÇƏK
+        Object.entries(AZ_AIRPORTS).forEach(([code, ap]) => {
+          viewer.entities.add({
+            id: `airport-${code}`,
+            position: Cesium.Cartesian3.fromDegrees(ap.lon, ap.lat, 0),
+            billboard: {
+              image: airportIconUrl,
+              width: 16,
+              height: 16,
+              verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            },
+            label: {
+              text: `${code} - ${ap.name}`,
+              font: 'bold 11px sans-serif',
+              fillColor: Cesium.Color.CYAN,
+              style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+              outlineColor: Cesium.Color.BLACK,
+              outlineWidth: 3,
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+              pixelOffset: new Cesium.Cartesian2(0, -12),
+              distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 800000)
+            }
+          })
+        })
+
+        // 2. TƏYYARƏLƏRİ VƏ TRAYEKTORİYALARI ÇƏK
         if (data.planes && data.planes.length > 0) {
           data.planes.forEach((plane) => {
             if (plane.lat == null || plane.lon == null) return;
@@ -93,14 +130,15 @@ export default function App() {
             const altMeters = (plane.alt ?? 10000) * FEET_TO_METERS;
             const color = STATUS_COLORS[plane.status] || Cesium.Color.CYAN;
 
+            // Təyyarə Entity
             viewer.entities.add({
               id: plane.hex,
               name: plane.callsign || plane.hex,
               position: Cesium.Cartesian3.fromDegrees(plane.lon, plane.lat, altMeters),
               billboard: {
                 image: planeIconUrl,
-                width: 26,
-                height: 26,
+                width: 24,
+                height: 24,
                 rotation: -headingRad,
                 alignedAxis: Cesium.Cartesian3.ZERO,
                 color: color,
@@ -112,9 +150,31 @@ export default function App() {
                 style: Cesium.LabelStyle.FILL_AND_OUTLINE,
                 outlineWidth: 2,
                 verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                pixelOffset: new Cesium.Cartesian2(0, -22),
+                pixelOffset: new Cesium.Cartesian2(0, -20),
+                // YENİLİK: Adlar yalnız 400 km-dən yaxın məsafədə görünsün
+                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 400000)
               },
             })
+
+            // Trayektoriya Xətti (YALNIZ ENƏN TƏYYARƏLƏR ÜÇÜN)
+            const isLanding = ['landing', 'approach', 'descending'].includes(plane.status);
+            
+            if (isLanding && plane.target_airport && AZ_AIRPORTS[plane.target_airport]) {
+              const target = AZ_AIRPORTS[plane.target_airport];
+              
+              viewer.entities.add({
+                id: `trail-${plane.hex}`,
+                polyline: {
+                  positions: Cesium.Cartesian3.fromDegreesArrayHeights([                    plane.lon, plane.lat, altMeters,                    target.lon, target.lat, 0                  ]),
+                  width: 1.5, // Daha nazik
+                  material: new Cesium.PolylineDashMaterialProperty({
+                    color: color.withAlpha(0.4), // Daha şəffaf
+                    dashLength: 12.0
+                  }),
+                  arcType: Cesium.ArcType.GEODESIC
+                }
+              })
+            }
           })
           console.log(`✅ ${data.planes.length} təyyarə çəkildi.`)
         }
@@ -126,11 +186,18 @@ export default function App() {
     const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
     handler.setInputAction((click) => {
       const pickedObject = viewer.scene.pick(click.position)
-      const hex = pickedObject?.id?.id;
-      if (hex) {
+      
+      if (Cesium.defined(pickedObject) && pickedObject.id) {
+        const entity = pickedObject.id;
+        const hex = entity.id;
         const plane = planesMapRef.current.get(hex);
+        
         if (plane) {
           setSelectedPlane(plane);
+          viewer.flyTo(entity, {
+            duration: 1.5,
+            offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), 30000)
+          });
           return;
         }
       }
