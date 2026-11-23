@@ -1,204 +1,161 @@
-import httpx
-import math
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+import httpx
+import time
+import math
 
-app = FastAPI()
+app = FastAPI(title="SkyTrack 3D API")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ===== CACHE =====
-_cache = {"data": None, "timestamp": None, "source": None}
-CACHE_TTL = 10
+# ---------- CACHE ----------
+_cache = {}
+CACHE_TTL = 10  # saniyə
 
-# ===== MƏRKƏZ (Bakı) =====
-BAKU_LAT = 40.4675
-BAKU_LON = 50.0467
-RADIUS_NM = 400  # 250 -> 400 (daha çox təyyarə)
+def get_cache(key):
+    if key in _cache:
+        data, ts = _cache[key]
+        if time.time() - ts < CACHE_TTL:
+            return data
+    return None
 
-# ===== AZƏRBAYCAN HAVA LİMANLARI =====
-AIRPORTS = {
-    "GYD": {"name": "Bakı Heydər Əliyev", "lat": 40.4675, "lon": 50.0467},
-    "NAJ": {"name": "Naxçıvan", "lat": 39.1888, "lon": 45.4584},
-    "GAN": {"name": "Gəncə", "lat": 40.7377, "lon": 46.3176},
-    "LLK": {"name": "Lənkəran", "lat": 38.7464, "lon": 48.8183},
-    "GBB": {"name": "Qəbələ", "lat": 40.8267, "lon": 47.7125},
-    "ZTU": {"name": "Zaqatala", "lat": 41.5622, "lon": 46.6672},
+def set_cache(key, data):
+    _cache[key] = (data, time.time())
+
+# ---------- AZƏRBAYCAN HAVA LİMANLARI ----------
+AZ_AIRPORTS = {
+    "GYD": {"name": "Heydər Əliyev Intl", "city": "Bakı",       "lat": 40.4675, "lon": 50.0467},
+    "NAJ": {"name": "Naxçıvan",           "city": "Naxçıvan",   "lat": 39.1888, "lon": 45.4584},
+    "GAN": {"name": "Gəncə Intl",         "city": "Gəncə",      "lat": 40.7377, "lon": 46.3176},
+    "LLK": {"name": "Lənkəran Intl",      "city": "Lənkəran",   "lat": 38.7464, "lon": 48.8180},
+    "GBB": {"name": "Qəbələ Intl",        "city": "Qəbələ",     "lat": 40.8267, "lon": 47.7125},
+    "ZTU": {"name": "Zaqatala Intl",      "city": "Zaqatala",   "lat": 41.5622, "lon": 46.6672},
 }
 
+AZ_CENTER = {"lat": 40.4093, "lon": 49.8671}  # Bakı mərkəzi
+RADIUS_NM = 400  # 250 → 400 NM
 
-# ===== FETCHERS =====
-async def fetch_adsb_lol(client):
-    url = f"https://api.adsb.lol/v2/point/{BAKU_LAT}/{BAKU_LON}/{RADIUS_NM}"
+# ---------- HAVERSINE ----------
+def haversine(lat1, lon1, lat2, lon2):
+    """Məsafə km ilə"""
+    R = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1-a))
+
+def find_nearest_airport(lat, lon):
+    best, best_dist = None, float('inf')
+    for code, ap in AZ_AIRPORTS.items():
+        d = haversine(lat, lon, ap["lat"], ap["lon"])
+        if d < best_dist:
+            best_dist = d
+            best = {**ap, "code": code, "distance_km": round(d, 1)}
+    return best
+
+def calculate_eta(distance_km, groundspeed_kts):
+    """ETA dəqiqə ilə. Sürət < 50 kts → None (yerə enib/qalxır)"""
+    if not groundspeed_kts or groundspeed_kts < 50:
+        return None
+    speed_kmh = groundspeed_kts * 1.852
+    return round((distance_km / speed_kmh) * 60, 1)
+
+# ---------- API FALLBACK SİSTEMİ ----------
+async def fetch_adsb_lol(client, lat, lon, radius_nm):
+    url = f"https://api.adsb.lol/v2/point/{lat}/{lon}/{radius_nm}"
+    r = await client.get(url, timeout=10)
+    r.raise_for_status()
+    return r.json().get("ac", []), "adsb.lol"
+
+async def fetch_airplanes_live(client, lat, lon, radius_nm):
+    url = f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius_nm}"
+    r = await client.get(url, timeout=10)
+    r.raise_for_status()
+    return r.json().get("ac", []), "airplanes.live"
+
+async def fetch_adsb_fi(client, lat, lon, radius_nm):
+    url = f"https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius_nm}"
+    r = await client.get(url, timeout=10)
+    r.raise_for_status()
+    return r.json().get("ac", []), "adsb.fi"
+
+async def fetch_opensky(client, lat, lon, radius_nm):
+    dlat = radius_nm / 60.0
+    dlon = radius_nm / (60.0 * math.cos(math.radians(lat)))
+    url = (f"https://opensky-network.org/api/states/all?"
+           f"lamin={lat-dlat}&lomin={lon-dlon}&lamax={lat+dlat}&lomax={lon+dlon}")
     r = await client.get(url, timeout=15)
-    if r.status_code == 200:
-        return r.json().get("ac", [])
-    return None
+    r.raise_for_status()
+    states = r.json().get("states") or []
+    planes = []
+    for s in states:
+        planes.append({
+            "hex": s[0],
+            "flight": (s[1] or "").strip(),
+            "lat": s[6],
+            "lon": s[5],
+            "alt_baro": s[13] if s[13] else (s[7] * 3.28084 if s[7] else None),
+            "gs": s[9] * 1.94384 if s[9] else None,
+            "track": s[10],
+            "baro_rate": s[11],
+        })
+    return planes, "opensky"
 
-
-async def fetch_airplanes_live(client):
-    url = f"https://api.airplanes.live/v2/point/{BAKU_LAT}/{BAKU_LON}/{RADIUS_NM}"
-    r = await client.get(url, timeout=15)
-    if r.status_code == 200:
-        return r.json().get("ac", [])
-    return None
-
-
-async def fetch_adsb_fi(client):
-    url = f"https://opendata.adsb.fi/api/v2/lat/{BAKU_LAT}/lon/{BAKU_LON}/dist/{RADIUS_NM}"
-    r = await client.get(url, timeout=15)
-    if r.status_code == 200:
-        return r.json().get("aircraft", [])
-    return None
-
-
-async def fetch_opensky(client):
-    params = {
-        "lamin": BAKU_LAT - 4, "lamax": BAKU_LAT + 4,
-        "lomin": BAKU_LON - 6, "lomax": BAKU_LON + 6,
-    }
-    r = await client.get(
-        "https://opensky-network.org/api/states/all",
-        params=params, timeout=15,
-    )
-    if r.status_code == 200:
-        states = r.json().get("states") or []
-        return [
-            {
-                "hex": s[0],
-                "flight": (s[1] or "").strip(),
-                "lon": s[5], "lat": s[6],
-                "alt_baro": s[7] * 3.28084 if s[7] else None,
-                "gs": s[9] * 1.94384 if s[9] else None,
-                "track": s[10],
-                "country": s[2],
-            }
-            for s in states if s[5] and s[6]
-        ]
-    return None
-
-
-# ===== NORMALIZER =====
-def normalize(ac_list):
-    out = []
-    for ac in ac_list:
-        try:
-            lat, lon = ac.get("lat"), ac.get("lon")
-            if lat is None or lon is None:
-                continue
-            out.append({
-                "hex": ac.get("hex", ""),
-                "callsign": (ac.get("flight") or ac.get("callsign") or "").strip(),
-                "lat": lat, "lon": lon,
-                "alt": ac.get("alt_baro") or ac.get("alt_geom") or ac.get("altitude"),
-                "speed": ac.get("gs") or ac.get("speed"),
-                "heading": ac.get("track") or ac.get("heading") or 0,
-                "country": ac.get("country") or ac.get("origin_country") or "",
-                "type": ac.get("t") or ac.get("type") or "",
-            })
-        except Exception:
-            continue
-    return out
-
-
-# ===== HAVERSINE (məsafə NM ilə) =====
-def haversine_nm(lat1, lon1, lat2, lon2):
-    R = 3440.065
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
-    return 2 * R * math.asin(math.sqrt(a))
-
-
-# ===== ORTAQ CACHE FUNKSİYASI =====
-async def get_planes_cached():
-    now = datetime.now()
-    if (_cache["data"] and _cache["timestamp"]
-            and (now - _cache["timestamp"]).total_seconds() < CACHE_TTL):
-        return _cache["data"], f"cache({_cache['source']})"
+async def fetch_planes(lat, lon, radius_nm):
+    cache_key = f"planes:{lat}:{lon}:{radius_nm}"
+    cached = get_cache(cache_key)
+    if cached:
+        return cached
 
     async with httpx.AsyncClient() as client:
-        for name, fetcher in [
-            ("adsb.lol", fetch_adsb_lol),
-            ("airplanes.live", fetch_airplanes_live),
-            ("adsb.fi", fetch_adsb_fi),
-            ("opensky", fetch_opensky),
-        ]:
+        for fetcher in [fetch_adsb_lol, fetch_airplanes_live, fetch_adsb_fi, fetch_opensky]:
             try:
-                data = await fetcher(client)
-                if data:
-                    planes = normalize(data)
-                    _cache.update(data=planes, timestamp=now, source=name)
-                    return planes, name
+                planes, source = await fetcher(client, lat, lon, radius_nm)
+                if planes:
+                    result = {"source": source, "count": len(planes), "planes": planes}
+                    set_cache(cache_key, result)
+                    return result
             except Exception as e:
-                print(f"[{name}] xəta: {e}")
+                print(f"⚠️ {fetcher.__name__} failed: {e}")
                 continue
 
-    if _cache["data"]:
-        return _cache["data"], "stale_cache"
-    return [], "none"
+    return {"source": "none", "count": 0, "planes": []}
 
-
-# ===== ENDPOINT 1: Bütün təyyarələr (3D xəritə üçün) =====
-@app.get("/api/planes-3d")
-async def planes_3d():
-    planes, source = await get_planes_cached()
-    return {"source": source, "count": len(planes), "planes": planes}
-
-
-# ===== ENDPOINT 2: Azərbaycana enən təyyarələr (ETA ilə) =====
-@app.get("/api/planes-az")
-async def planes_az():
-    planes, source = await get_planes_cached()
-
-    result = []
-    for p in planes:
-        lat, lon = p.get("lat"), p.get("lon")
-        speed = p.get("speed") or 0
-        if not lat or not lon or speed < 50:
-            continue
-
-        # Ən yaxın hava limanını tap
-        nearest = None
-        min_dist = float("inf")
-        for code, ap in AIRPORTS.items():
-            d = haversine_nm(lat, lon, ap["lat"], ap["lon"])
-            if d < min_dist:
-                min_dist = d
-                nearest = code
-
-        if min_dist > 250:  # 250 NM-dən uzaqdırsa, keç
-            continue
-
-        # ETA hesabla (dəqiqə)
-        eta_min = (min_dist / speed) * 60 if speed > 0 else None
-
-        result.append({
-            **p,
-            "nearest_airport": nearest,
-            "airport_name": AIRPORTS[nearest]["name"],
-            "distance_nm": round(min_dist, 1),
-            "eta_minutes": round(eta_min, 1) if eta_min else None,
-        })
-
-    # ETA-ya görə sırala (ən yaxın əvvəl)
-    result.sort(key=lambda x: x["eta_minutes"] or 9999)
-
-    return {
-        "source": source,
-        "count": len(result),
-        "airports": AIRPORTS,
-        "planes": result,
-    }
-
-
+# ---------- ENDPOINT-LƏR ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "skytrack-3d"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.0"}
+
+@app.get("/api/planes-3d")
+async def planes_3d():
+    return await fetch_planes(AZ_CENTER["lat"], AZ_CENTER["lon"], RADIUS_NM)
+
+@app.get("/api/planes-az")
+async def planes_az():
+    result = await fetch_planes(AZ_CENTER["lat"], AZ_CENTER["lon"], RADIUS_NM)
+    enriched = []
+    for p in result["planes"]:
+        lat, lon = p.get("lat"), p.get("lon")
+        if lat is None or lon is None:
+            continue
+        nearest = find_nearest_airport(lat, lon)
+        gs = p.get("gs") or 0
+        eta_min = calculate_eta(nearest["distance_km"], gs)
+        enriched.append({
+            **p,
+            "nearest_airport": nearest["code"],
+            "airport_name": nearest["name"],
+            "airport_city": nearest["city"],
+            "distance_km": nearest["distance_km"],
+            "eta_minutes": eta_min,
+        })
+    # ETA-ya görə sırala (ETA-sı olanlar əvvəl, ən yaxın əvvəl)
+    enriched.sort(key=lambda x: (x["eta_minutes"] is None, x["eta_minutes"] or 99999))
+    return {"source": result["source"], "count": len(enriched), "planes": enriched}
