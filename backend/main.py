@@ -139,13 +139,17 @@ async def fetch_opensky(client, lat, lon, radius_nm):
     states = r.json().get("states") or []
     planes = []
     for s in states:
+        # Hər iki mənbə METRDƏDİR → həmişə FUT-a çevir
+        alt_m = s[13] if s[13] is not None else s[7]
+        alt_ft = round(alt_m * 3.28084, 1) if alt_m is not None else None
+
         planes.append({
             "hex": s[0],
             "callsign": (s[1] or "").strip(),
             "lat": s[6],
             "lon": s[5],
-            "alt": s[13] if s[13] else (s[7] * 3.28084 if s[7] else None),
-            "speed": s[9] * 1.94384 if s[9] else None,
+            "alt": alt_ft,  # ← HƏMİŞƏ FUT
+            "speed": round(s[9] * 1.94384, 1) if s[9] else None,
             "heading": s[10],
             "country": s[2],
         })
