@@ -22,10 +22,11 @@ html, body, #root {
   height: 100%;
 }
 
+/* DƏYİŞİKLİK BURADA: Sol yuxarıdan sağ aşağıya keçirdik */
 .hud {
   position: absolute;
-  top: 20px;
-  left: 20px;
+  bottom: 20px;
+  right: 20px;
   background: rgba(10, 20, 40, 0.75);
   color: #fff;
   padding: 16px 24px;
@@ -33,6 +34,7 @@ html, body, #root {
   backdrop-filter: blur(8px);
   border: 1px solid rgba(100, 200, 255, 0.3);
   z-index: 100;
+  text-align: right; /* Yazını sağa düzdük */
 }
 
 .hud h1 {
@@ -45,6 +47,8 @@ html, body, #root {
   font-size: 13px;
   color: #a0c0e0;
 }
+
+/* Sağ yuxarı - Təyyarə məlumat paneli */
 .info-panel {
   position: absolute;
   top: 20px;
@@ -59,8 +63,10 @@ html, body, #root {
   z-index: 100;
   box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
 }
+
 .info-panel h2 { margin: 0 0 12px 0; color: #00d4ff; font-size: 16px; }
 .info-panel p { margin: 6px 0; font-size: 13px; }
+
 .close-btn {
   position: absolute;
   top: 8px;
