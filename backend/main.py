@@ -39,7 +39,7 @@ AZ_AIRPORTS = {
 }
 
 AZ_CENTER = {"lat": 40.4093, "lon": 49.8671}
-RADIUS_NM = 400
+RADIUS_NM = 250
 
 # ---------- HELPERS ----------
 def _get(p, *keys):
