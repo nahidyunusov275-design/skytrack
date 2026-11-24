@@ -9,7 +9,7 @@ app = FastAPI(title="SkyTrack 3D API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,   # ✅ "*" ilə True ola bilməz
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -49,6 +49,14 @@ def _get(p, *keys):
             return v
     return None
 
+def _num(v):
+    """✅ String 'ground', None, bool və s.-ni təhlükəsiz rəqəmə çevir"""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    return None
+
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371.0
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -65,7 +73,8 @@ def bearing(lat1, lon1, lat2, lon2):
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 def find_target_airport(lat, lon, heading):
-    if heading is None:
+    # ✅ Heading rəqəm deyilsə, target yoxdur
+    if not isinstance(heading, (int, float)):
         return None
     best, best_score = None, float('inf')
     for code, ap in AZ_AIRPORTS.items():
@@ -88,8 +97,12 @@ def find_target_airport(lat, lon, heading):
     return best
 
 def classify_plane(alt, speed, target):
-    if alt is None: alt = 0
-    if speed is None: speed = 0
+    # ✅ Rəqəm olmayanları sıfıra çevir
+    if not isinstance(alt, (int, float)):
+        alt = 0
+    if not isinstance(speed, (int, float)):
+        speed = 0
+
     if alt < 500 and speed < 50:
         return "ground"
     if target is None:
@@ -107,12 +120,12 @@ def classify_plane(alt, speed, target):
     return "cruise"
 
 def calculate_eta(distance_nm, groundspeed_kts):
-    if not groundspeed_kts or groundspeed_kts < 50:
+    # ✅ Rəqəm olmayanları rədd et
+    if not isinstance(groundspeed_kts, (int, float)) or groundspeed_kts < 50:
         return None
     return round((distance_nm / groundspeed_kts) * 60, 1)
 
 # ---------- API FALLBACK ----------
-# Yalnız etibarlı API-lər. adsb.one və airplanes.live çıxarıldı (Render-i bloklayır)
 HEADERS = {
     "Accept": "application/json",
 }
@@ -139,16 +152,27 @@ async def fetch_opensky(client, lat, lon, radius_nm):
     states = r.json().get("states") or []
     planes = []
     for s in states:
+        # ✅ alt_m: s[13] (geo_altitude) və ya s[7] (baro_altitude, bool ola bilər)
         alt_m = s[13] if s[13] is not None else s[7]
+        if not isinstance(alt_m, (int, float)):
+            alt_m = None
         alt_ft = round(alt_m * 3.28084, 1) if alt_m is not None else None
+
+        # ✅ speed: s[9] (velocity, m/s)
+        vel = s[9] if isinstance(s[9], (int, float)) else None
+        speed_kts = round(vel * 1.94384, 1) if vel is not None else None
+
+        # ✅ heading: s[10] (true_track)
+        hdg = s[10] if isinstance(s[10], (int, float)) else None
+
         planes.append({
             "hex": s[0],
             "callsign": (s[1] or "").strip(),
             "lat": s[6],
             "lon": s[5],
             "alt": alt_ft,
-            "speed": round(s[9] * 1.94384, 1) if s[9] else None,
-            "heading": s[10],
+            "speed": speed_kts,
+            "heading": hdg,
             "country": s[2],
         })
     return planes, "opensky"
@@ -164,7 +188,6 @@ async def fetch_planes(lat, lon, radius_nm):
         sources_used = []
 
         async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-            # Yalnız 3 etibarlı API
             for fetcher in [fetch_adsb_lol, fetch_adsb_fi, fetch_opensky]:
                 try:
                     planes, source = await fetcher(client, lat, lon, radius_nm)
@@ -193,7 +216,7 @@ async def fetch_planes(lat, lon, radius_nm):
 # ---------- ENDPOINTS ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.6"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.7"}
 
 @app.get("/api/planes-3d")
 async def planes_3d():
@@ -204,15 +227,25 @@ async def planes_az(status: str = None):
     result = await fetch_planes(AZ_CENTER["lat"], AZ_CENTER["lon"], RADIUS_NM)
     enriched = []
     for p in result["planes"]:
-        lat = _get(p, "lat")
-        lon = _get(p, "lon")
+        lat = _num(_get(p, "lat"))
+        lon = _num(_get(p, "lon"))
         if lat is None or lon is None:
             continue
 
-        alt = _get(p, "alt", "alt_baro") or 0
-        speed = _get(p, "speed", "gs") or 0
-        heading = _get(p, "heading", "track")
+        # ✅ Hər üç sahəni təmizlə — string "ground" gələ bilər
+        alt = _num(_get(p, "alt", "alt_baro"))
+        if alt is None:
+            alt = 0
+
+        speed = _num(_get(p, "speed", "gs"))
+        if speed is None:
+            speed = 0
+
+        heading = _num(_get(p, "heading", "track"))
+
         callsign = _get(p, "callsign", "flight") or ""
+        if not isinstance(callsign, str):
+            callsign = ""
 
         if speed > 700:
             speed = 0
@@ -229,7 +262,7 @@ async def planes_az(status: str = None):
 
         enriched.append({
             "hex": p.get("hex"),
-            "callsign": callsign.strip() if isinstance(callsign, str) else callsign,
+            "callsign": callsign.strip(),
             "lat": lat,
             "lon": lon,
             "alt": alt,
