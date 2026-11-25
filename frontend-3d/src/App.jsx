@@ -2,23 +2,19 @@ import LandedPanel from './LandedPanel';
 import InboundPanel from './InboundPanel';
 import SimulatorView from './SimulatorView';
 import SimulatorEntry from './SimulatorEntry';
-import { useEffect, useRef, useState } from 'react'
-import * as Cesium from 'cesium'
-import 'cesium/Build/Cesium/Widgets/widgets.css'
-import './App.css'
+import { useEffect, useRef, useState } from 'react';
+import * as Cesium from 'cesium';
+import 'cesium/Build/Cesium/Widgets/widgets.css';
+import './App.css';
 
-
-// Təyyarə ikonu (SVG)
 const planeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M21,16V14L13,9V3.5A1.5,1.5 0 0,0 11.5,2A1.5,1.5 0 0,0 10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z"/></svg>`;
 const planeIconUrl = 'data:image/svg+xml;base64,' + btoa(planeSvg);
 
-// Hava limanı ikonu (Dairə)
 const airportSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#00d4ff"><circle cx="12" cy="12" r="8" stroke="white" stroke-width="2"/></svg>`;
 const airportIconUrl = 'data:image/svg+xml;base64,' + btoa(airportSvg);
 
 const FEET_TO_METERS = 0.3048;
 
-// Azərbaycan Hava Limanları
 const AZ_AIRPORTS = {
   GYD: { name: 'Bakı', lat: 40.4675, lon: 50.0467 },
   NAJ: { name: 'Naxçıvan', lat: 39.1888, lon: 45.4584 },
@@ -28,7 +24,6 @@ const AZ_AIRPORTS = {
   ZTU: { name: 'Zaqatala', lat: 41.5622, lon: 46.6672 },
 };
 
-// Status rəngləri
 const STATUS_COLORS = {
   landing: Cesium.Color.LIME,
   approach: Cesium.Color.LIME,
@@ -48,24 +43,18 @@ const STATUS_LABELS = {
 };
 
 export default function App() {
-    // Test rejimi: ?test=1 ilə açılır
-    const urlParams = new URLSearchParams(window.location.search);
+  const [simMode, setSimMode] = useState(false);
   const [simTarget, setSimTarget] = useState(null);
 
-  if (urlParams.get('test') === '1') {
-    if (!simTarget) return <SimulatorEntry onStart={(code) => setSimTarget(code)} />;
-    return <SimulatorView targetAirport={simTarget} />;
-  }
-  const viewerRef = useRef(null)
-  const viewerInstanceRef = useRef(null)
-  const planesMapRef = useRef(new Map())      // hex -> plane data
-  const entitiesMapRef = useRef(new Map())    // hex -> { entity, positionProperty, trailEntity }
-  const [selectedPlane, setSelectedPlane] = useState(null)
+  const viewerRef = useRef(null);
+  const viewerInstanceRef = useRef(null);
+  const planesMapRef = useRef(new Map());
+  const entitiesMapRef = useRef(new Map());
+  const [selectedPlane, setSelectedPlane] = useState(null);
 
   const focusOnPlane = (plane) => {
     const viewer = viewerInstanceRef.current;
     if (!viewer || viewer.isDestroyed()) return;
-
     const entity = viewer.entities.getById(plane.hex);
     if (entity) {
       viewer.flyTo(entity, {
@@ -73,9 +62,11 @@ export default function App() {
         offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), 30000)
       });
     }
-  }
+  };
 
   useEffect(() => {
+    if (simMode) return; // Əgər simulyatordadırsa, xəritəni yükləmə
+
     const viewer = new Cesium.Viewer(viewerRef.current, {
       animation: false,
       timeline: false,
@@ -92,19 +83,17 @@ export default function App() {
           url: 'https://tile.openstreetmap.org/'
         })
       ),
-    })
+    });
     viewerInstanceRef.current = viewer;
 
-    // ✅ Saat real vaxtla sinxron işləsin (smooth movement üçün vacib)
     viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
     viewer.clock.shouldAnimate = true;
 
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(49.8671, 40.4093, 1500000),
       orientation: { heading: 0, pitch: Cesium.Math.toRadians(-90), roll: 0 },
-    })
+    });
 
-    // ✅ HAVA LİMANLARINI BİR DƏFƏ ÇƏK (hər poll-da yenidən çəkmirik)
     Object.entries(AZ_AIRPORTS).forEach(([code, ap]) => {
       viewer.entities.add({
         id: `airport-${code}`,
@@ -126,35 +115,30 @@ export default function App() {
           pixelOffset: new Cesium.Cartesian2(0, -12),
           distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 800000)
         }
-      })
-    })
+      });
+    });
 
     const fetchAndDrawPlanes = async () => {
       try {
-        const response = await fetch("https://skytrack-backend-j6az.onrender.com/api/planes-az")
-        if (!response.ok) throw new Error(`Server xətası: ${response.status}`)
+        const response = await fetch("https://skytrack-backend-j6az.onrender.com/api/planes-az");
+        if (!response.ok) throw new Error(`Server xətası: ${response.status}`);
 
-        const data = await response.json()
+        const data = await response.json();
         if (viewer.isDestroyed()) return;
 
-        if (!data.planes || data.planes.length === 0) {
-          console.warn("⚠️ Backend boş data qaytardı, köhnə təyyarələr saxlanılır.")
-          return;
-        }
+        if (!data.planes || data.planes.length === 0) return;
 
         const currentIds = new Set();
         const now = Cesium.JulianDate.now();
 
         data.planes.forEach((plane) => {
-          // ✅ Sərt yoxlama
-          if (!plane.hex) return;
-          if (typeof plane.lat !== 'number' || typeof plane.lon !== 'number') return;
+          if (!plane.hex || typeof plane.lat !== 'number' || typeof plane.lon !== 'number') return;
           if (!isFinite(plane.lat) || !isFinite(plane.lon)) return;
 
           currentIds.add(plane.hex);
           planesMapRef.current.set(plane.hex, plane);
 
-          const headingRad = Cesium.Math.toRadians(plane.heading || 0)
+          const headingRad = Cesium.Math.toRadians(plane.heading || 0);
           const altMeters = (typeof plane.alt === 'number' ? plane.alt : 10000) * FEET_TO_METERS;
           const color = STATUS_COLORS[plane.status] || Cesium.Color.CYAN;
           const position = Cesium.Cartesian3.fromDegrees(plane.lon, plane.lat, altMeters);
@@ -162,14 +146,12 @@ export default function App() {
           let entry = entitiesMapRef.current.get(plane.hex);
 
           if (!entry) {
-            // ── YENİ TƏYYARƏ ──
             const positionProperty = new Cesium.SampledPositionProperty();
             positionProperty.addSample(now, position);
             positionProperty.setInterpolationOptions({
               interpolationDegree: 2,
               interpolationAlgorithm: Cesium.LagrangePolynomialApproximation,
             });
-            // Son sample-dan sonra yerində qalsın (uçub getməsin)
             positionProperty.forwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
             positionProperty.backwardExtrapolationType = Cesium.ExtrapolationType.HOLD;
 
@@ -197,35 +179,23 @@ export default function App() {
               },
             });
 
-            entitiesMapRef.current.set(plane.hex, {
-              entity,
-              positionProperty,
-              trailEntity: null,
-            });
+            entitiesMapRef.current.set(plane.hex, { entity, positionProperty, trailEntity: null });
           } else {
-            // ── MÖVCUD TƏYYARƏ: yeni sample əlavə et ──
             entry.positionProperty.addSample(now, position);
-            // Billboard-u yenilə (rəng, istiqamət dəyişə bilər)
             if (entry.entity.billboard) {
               entry.entity.billboard.rotation = -headingRad;
               entry.entity.billboard.color = color;
             }
           }
 
-          // ── TRAYEKTORİYA (Bütün hədəfi olan təyyarələr üçün) ──
           const entry2 = entitiesMapRef.current.get(plane.hex);
-
           if (plane.target_airport && AZ_AIRPORTS[plane.target_airport]) {
             const target = AZ_AIRPORTS[plane.target_airport];
-
             if (entry2.trailEntity) {
-              // Mövcud xətti yenilə
               entry2.trailEntity.polyline.material = new Cesium.PolylineGlowMaterialProperty({
-                glowPower: 0.2,
-                color: color.withAlpha(0.8)
+                glowPower: 0.2, color: color.withAlpha(0.8)
               });
             } else {
-              // Yeni parlaq xətt yarat
               const trailEntity = viewer.entities.add({
                 id: `trail-${plane.hex}`,
                 polyline: {
@@ -237,8 +207,7 @@ export default function App() {
                   }, false),
                   width: 2.0,
                   material: new Cesium.PolylineGlowMaterialProperty({
-                    glowPower: 0.2,
-                    color: color.withAlpha(0.8)
+                    glowPower: 0.2, color: color.withAlpha(0.8)
                   }),
                   arcType: Cesium.ArcType.GEODESIC
                 }
@@ -246,13 +215,11 @@ export default function App() {
               entry2.trailEntity = trailEntity;
             }
           } else if (entry2.trailEntity) {
-            // Hədəf yoxdursa, xətti sil
             viewer.entities.remove(entry2.trailEntity);
             entry2.trailEntity = null;
           }
         });
 
-        // ── SİLİNMİŞ TƏYYARƏLƏRİ TƏMİZLƏ ──
         entitiesMapRef.current.forEach((entry, hex) => {
           if (!currentIds.has(hex)) {
             viewer.entities.remove(entry.entity);
@@ -261,21 +228,17 @@ export default function App() {
             planesMapRef.current.delete(hex);
           }
         });
-
-        console.log(`✅ ${data.planes.length} təyyarə yeniləndi.`);
       } catch (error) {
-        console.error("❌ Backend-ə qoşulma xətası (köhnə təyyarələr saxlanılır):", error.message)
+        console.error("❌ Backend-ə qoşulma xətası:", error.message);
       }
-    }
+    };
 
-    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas)
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     handler.setInputAction((click) => {
-      const pickedObject = viewer.scene.pick(click.position)
-
+      const pickedObject = viewer.scene.pick(click.position);
       if (Cesium.defined(pickedObject) && pickedObject.id) {
         const entity = pickedObject.id;
         const plane = planesMapRef.current.get(entity.id);
-
         if (plane) {
           setSelectedPlane(plane);
           viewer.flyTo(entity, {
@@ -285,61 +248,90 @@ export default function App() {
           return;
         }
       }
-      setSelectedPlane(null)
-    }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+      setSelectedPlane(null);
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
-    fetchAndDrawPlanes()
-    const intervalId = setInterval(fetchAndDrawPlanes, 10000)
+    fetchAndDrawPlanes();
+    const intervalId = setInterval(fetchAndDrawPlanes, 10000);
 
     return () => {
-      clearInterval(intervalId)
-      handler.destroy()
-      entitiesMapRef.current.clear()
-      planesMapRef.current.clear()
-      if (!viewer.isDestroyed()) viewer.destroy()
-    }
-  }, [])
+      clearInterval(intervalId);
+      handler.destroy();
+      entitiesMapRef.current.clear();
+      planesMapRef.current.clear();
+      if (!viewer.isDestroyed()) viewer.destroy();
+    };
+  }, [simMode]);
 
   return (
     <div className="app-container">
-      <div ref={viewerRef} className="cesium-container" />
-
-      <InboundPanel
-        onPlaneClick={(plane) => {
-          setSelectedPlane(plane);
-          focusOnPlane(plane);
-        }}
-      />
-
-      {/* YENİ: Enmiş təyyarələrin paneli (Sağ aşağıda görünəcək) */}
-      <LandedPanel />
-
-      <div className="hud">
-        <h1>🌍 SkyTrack 3D</h1>
-        <p>Real vaxt rejimində təyyarələr</p>
+      {/* HEADER - Yuxarı Panel və ON/OFF Düyməsi */}
+      <div className="top-bar">
+        <div className="hud">
+          <h1>🌍 SkyTrack 3D</h1>
+          <p>Real vaxt rejimində təyyarələr</p>
+        </div>
+        
+        <div className="sim-toggle-container">
+          <span>Simulyator Rejimi</span>
+          <label className="switch">
+            <input 
+              type="checkbox" 
+              checked={simMode} 
+              onChange={(e) => {
+                setSimMode(e.target.checked);
+                if (!e.target.checked) setSimTarget(null); // Söndürəndə hədəfi sıfırla
+              }} 
+            />
+            <span className="slider round"></span>
+          </label>
+        </div>
       </div>
 
-      {selectedPlane && (
-        <div className="info-panel">
-          <button className="close-btn" onClick={() => setSelectedPlane(null)}>✕</button>
-          <h2>✈️ {selectedPlane.callsign || selectedPlane.hex}</h2>
-          <p><strong>Ölkə:</strong> {selectedPlane.country || '—'}</p>
-          <p><strong>Hündürlük:</strong> {selectedPlane.alt ? Math.round(selectedPlane.alt).toLocaleString() + ' ft' : '—'}</p>
-          <p><strong>Sürət:</strong> {selectedPlane.speed ? Math.round(selectedPlane.speed) + ' kts' : '—'}</p>
-          <p><strong>İstiqamət:</strong> {selectedPlane.heading != null ? Math.round(selectedPlane.heading) + '°' : '—'}</p>
-          <p><strong>Status:</strong> {STATUS_LABELS[selectedPlane.status] || selectedPlane.status || '—'}</p>
-          {selectedPlane.target_airport && (
-            <p><strong>Hədəf:</strong> {selectedPlane.target_airport} ({selectedPlane.airport_city})</p>
+      {/* ƏGƏR SİMULYATOR SÖNDÜRÜLÜBSƏ - XƏRİTƏNİ GÖSTƏR */}
+      {!simMode && (
+        <>
+          <div ref={viewerRef} className="cesium-container" />
+          <InboundPanel onPlaneClick={(plane) => { setSelectedPlane(plane); focusOnPlane(plane); }} />
+          <LandedPanel />
+          
+          {selectedPlane && (
+            <div className="info-panel">
+              <button className="close-btn" onClick={() => setSelectedPlane(null)}>✕</button>
+              <h2>✈️ {selectedPlane.callsign || selectedPlane.hex}</h2>
+              <p><strong>Ölkə:</strong> {selectedPlane.country || '—'}</p>
+              <p><strong>Hündürlük:</strong> {selectedPlane.alt ? Math.round(selectedPlane.alt).toLocaleString() + ' ft' : '—'}</p>
+              <p><strong>Sürət:</strong> {selectedPlane.speed ? Math.round(selectedPlane.speed) + ' kts' : '—'}</p>
+              <p><strong>İstiqamət:</strong> {selectedPlane.heading != null ? Math.round(selectedPlane.heading) + '°' : '—'}</p>
+              <p><strong>Status:</strong> {STATUS_LABELS[selectedPlane.status] || selectedPlane.status || '—'}</p>
+              {selectedPlane.target_airport && (
+                <p><strong>Hədəf:</strong> {selectedPlane.target_airport} ({selectedPlane.airport_city})</p>
+              )}
+              {selectedPlane.distance_nm != null && (
+                <p><strong>Məsafə:</strong> {selectedPlane.distance_nm} NM</p>
+              )}
+              {selectedPlane.eta_minutes != null && (
+                <p><strong>ETA:</strong> {selectedPlane.eta_minutes} dəq</p>
+              )}
+              <p><strong>Koordinat:</strong> {selectedPlane.lat?.toFixed(3)}, {selectedPlane.lon?.toFixed(3)}</p>
+            </div>
           )}
-          {selectedPlane.distance_nm != null && (
-            <p><strong>Məsafə:</strong> {selectedPlane.distance_nm} NM</p>
+        </>
+      )}
+
+      {/* ƏGƏR SİMULYATOR YANDIRILIBSA */}
+      {simMode && (
+        <div className="simulator-overlay">
+          {!simTarget ? (
+            <SimulatorEntry onStart={(code) => setSimTarget(code)} />
+          ) : (
+            <SimulatorView 
+              targetAirport={simTarget} 
+              onExit={() => { setSimMode(false); setSimTarget(null); }} 
+            />
           )}
-          {selectedPlane.eta_minutes != null && (
-            <p><strong>ETA:</strong> {selectedPlane.eta_minutes} dəq</p>
-          )}
-          <p><strong>Koordinat:</strong> {selectedPlane.lat?.toFixed(3)}, {selectedPlane.lon?.toFixed(3)}</p>
         </div>
       )}
     </div>
-  )
+  );
 }

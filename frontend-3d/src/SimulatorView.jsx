@@ -15,23 +15,23 @@ const cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
   <ellipse cx="130" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
 </svg>`;
 
-// Səsli xəbərdarlıq funksiyası
+// Səsli xəbərdarlıq (Azərbaycan dilinə uyğunlaşdırıldı)
 const speak = (text) => {
   if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel(); // Əvvəlki səsləri ləğv et ki, üst-üstə yığılmasın
+    window.speechSynthesis.cancel(); 
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.rate = 1.0;
+    utterance.lang = 'az-AZ'; // Azərbaycan dili (brauzer dəstəkləməsə default səslə oxuyacaq)
+    utterance.rate = 0.95;
     window.speechSynthesis.speak(utterance);
   }
 };
 
-export default function SimulatorView({ targetAirport = 'GYD' }) {
+export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
   const viewerRef = useRef(null);
   const physicsRef = useRef(null);
   const inputRef = useRef({ up: false, down: false, left: false, right: false, shift: false, ctrl: false });
   const cameraModeRef = useRef('chase');
-  const statusRef = useRef('flying'); // Statusu ref-də saxlayırıq ki, useEffect təkrar işləməsin
+  const statusRef = useRef('flying'); 
   
   const [hud, setHud] = useState({ speed: 200, alt: 3000, heading: 90, pitch: 0, roll: 0, throttle: 50 });
   const [cameraMode, setCameraMode] = useState('chase');
@@ -42,7 +42,6 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
   const airport = AIRPORTS[targetAirport] || AIRPORTS.GYD;
 
   useEffect(() => {
-    // ✅ BTOA XƏTASI HƏLLİ: cloudUrl-i burada yaradırıq
     const cloudUrl = 'data:image/svg+xml;base64,' + btoa(cloudSvg);
 
     const viewer = new Cesium.Viewer(viewerRef.current, {
@@ -65,7 +64,6 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       })
       .catch((e) => console.warn('OSM buildings failed:', e));
 
-    // ✅ BULUDLAR
     for (let i = 0; i < 25; i++) {
       const lat = 40.3 + Math.random() * 0.4;
       const lon = 49.4 + Math.random() * 1.2;
@@ -82,7 +80,6 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       });
     }
 
-    // ✅ RUNWAY (Uçuş Zolağı) ÇƏKMƏK
     const runway = airport.runways[0];
     viewer.entities.add({
       id: 'runway',
@@ -100,16 +97,10 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       },
     });
 
-    // Runway mərkəzinə marker
     viewer.entities.add({
       id: 'runway-marker',
       position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 0),
-      point: {
-        pixelSize: 12,
-        color: Cesium.Color.LIME,
-        outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2,
-      },
+      point: { pixelSize: 12, color: Cesium.Color.LIME, outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
       label: {
         text: `${airport.code} - ${airport.name}`,
         font: 'bold 14px monospace',
@@ -121,7 +112,7 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       },
     });
 
-    // Başlanğıc: Hava limanından 30 NM uzaqda
+    // Başlanğıc nöqtəsi (Hava limanından 30 NM uzaqda)
     physicsRef.current = new FlightPhysics(airport.lat + 0.3, airport.lon - 0.3, 5000, 90);
 
     const planeEntity = viewer.entities.add({
@@ -139,7 +130,6 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
     viewer.trackedEntity = planeEntity;
     viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-15), 100);
 
-    // ── KLAVİATURA ──
     const onKeyDown = (e) => {
       const input = inputRef.current;
       if (e.key === 'ArrowUp') input.up = true;
@@ -167,12 +157,15 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
-    // ── UPDATE LOOP ──
     let lastTime = performance.now();
     let lastHudUpdate = 0;
     let rafId;
+    
+    // Xəbərdarlıq bayraqları
     let hasWarnedTooHigh = false;
     let hasWarnedTooFast = false;
+    let hasWarnedAway = false;
+    let initialDist = null;
 
     const update = () => {
       const now = performance.now();
@@ -192,7 +185,6 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       );
       planeEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(pos, hpr);
 
-      // ── KAMERA ──
       if (cameraModeRef.current === 'cockpit') {
         planeEntity.show = false;
         if (viewer.trackedEntity) viewer.trackedEntity = undefined;
@@ -212,9 +204,11 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
         }
       }
 
-      // ── MƏSAFƏ VƏ ENİŞ MƏNTİQİ ──
       const distNM = distanceToAirportNM(physics.lat, physics.lon, airport);
       
+      // İlk məsafəni qeyd et
+      if (initialDist === null) initialDist = distNM;
+
       if (now - lastHudUpdate > 100) {
         setDistance(Math.round(distNM));
         setHud({
@@ -228,35 +222,45 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
         lastHudUpdate = now;
       }
 
-      // Səsli xəbərdarlıqlar (hava limanına yaxınlaşanda)
+      // ── XƏBƏRDARLIQLAR ──
+      
+      // 1. Hədəfdən uzaqlaşma (İcazə vermir)
+      if (distNM > initialDist + 3 && !hasWarnedAway) {
+        speak("Diqqət! Təyinat hava limanından uzaqlaşırsınız. Geri qayıdın!");
+        setWarnings(w => [...w, "Uzaqlaşırsınız! Geri qayıdın!"]);
+        hasWarnedAway = true;
+        // 10 saniyə sonra yenidən xəbərdarlıq edə bilsin
+        setTimeout(() => { hasWarnedAway = false; }, 10000); 
+      }
+
+      // 2. Çox yüksək və sürətli (Yaxınlaşanda)
       if (distNM < 10 && distNM > 2) {
         if (physics.alt > 5000 && !hasWarnedTooHigh) {
-          speak("Warning: too high. Descend.");
-          setWarnings(w => [...w, "Too high!"]);
+          speak("Diqqət! Hündürlük çoxdur. Aşağı enin.");
+          setWarnings(w => [...w, "Hündürlük çoxdur!"]);
           hasWarnedTooHigh = true;
         }
         if (physics.speed > 250 && !hasWarnedTooFast) {
-          speak("Warning: too fast. Reduce speed.");
-          setWarnings(w => [...w, "Too fast!"]);
+          speak("Diqqət! Sürət çoxdur. Sürəti azaldın.");
+          setWarnings(w => [...w, "Sürət çoxdur!"]);
           hasWarnedTooFast = true;
         }
       }
 
-      // Eniş yoxlaması
+      // 3. Eniş yoxlaması
       if (distNM < 1 && physics.alt < 50) {
         if (physics.speed > 180) {
           physics.crashed = true;
-          speak("Crash! You landed too fast.");
+          speak("Qəza! Çox sürətli eniş etdiniz.");
         } else if (physics.speed < 50) {
           physics.crashed = true;
-          speak("Crash! You stalled.");
+          speak("Qəza! Təyyarə dayandı.");
         } else {
           physics.landed = true;
-          speak("Landing successful. Welcome to " + airport.city);
+          speak(`Təbriklər! Uğurlu eniş etdiniz. Xoş gəldiniz, ${airport.city}!`);
         }
       }
 
-      // ✅ STATUS XƏTASI HƏLLİ: statusRef istifadə edirik
       if (physics.crashed && statusRef.current !== 'crashed') {
         statusRef.current = 'crashed';
         setStatus('crashed');
@@ -275,11 +279,14 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       window.removeEventListener('keyup', onKeyUp);
       if (!viewer.isDestroyed()) viewer.destroy();
     };
-  }, [airport]); // ✅ STATUS-U BURADAN SİLDİK
+  }, [airport]); 
 
   return (
     <div className="sim-container">
       <div ref={viewerRef} className="cesium-container" />
+
+      {/* Simulyatordan çıxış düyməsi */}
+      <button className="exit-sim-btn" onClick={onExit}>✕ Çıxış</button>
 
       <div className="sim-hud">
         <div className="hud-row"><span>SPEED</span><span>{hud.speed} kt</span></div>
@@ -296,6 +303,12 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       <div className="sim-controls">
         ↑↓ Pitch · ←→ Roll · Shift Throttle+ · Ctrl Throttle− · C Camera
       </div>
+
+      {warnings.length > 0 && (
+        <div className="sim-warnings">
+          {warnings.map((w, i) => <div key={i} className="warning-item">{w}</div>)}
+        </div>
+      )}
 
       {status === 'crashed' && (
         <div className="sim-status crashed">

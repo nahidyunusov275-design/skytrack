@@ -22,33 +22,104 @@ html, body, #root {
   height: 100%;
 }
 
-/* DƏYİŞİKLİK BURADA: Sol yuxarıdan sağ aşağıya keçirdik */
-.hud {
+/* ── YUXARI PANEL (HEADER) ── */
+.top-bar {
   position: absolute;
-  bottom: 20px;
+  top: 20px;
+  left: 20px;
   right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 100;
+  pointer-events: none; /* Xəritəyə mane olmasın */
+}
+
+.top-bar .hud {
+  pointer-events: auto;
   background: rgba(10, 20, 40, 0.75);
   color: #fff;
   padding: 16px 24px;
   border-radius: 12px;
   backdrop-filter: blur(8px);
   border: 1px solid rgba(100, 200, 255, 0.3);
-  z-index: 100;
-  text-align: right; /* Yazını sağa düzdük */
+  text-align: left; /* Yuxarı sol olduğu üçün sola düzdük */
 }
 
-.hud h1 {
+.top-bar .hud h1 {
   font-size: 20px;
   margin-bottom: 4px;
   color: #64c8ff;
 }
 
-.hud p {
+.top-bar .hud p {
   font-size: 13px;
   color: #a0c0e0;
 }
 
-/* Sağ yuxarı - Təyyarə məlumat paneli */
+/* ── ON/OFF DÜYMƏSİ (TOGGLE SWITCH) ── */
+.sim-toggle-container {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  background: rgba(10, 20, 40, 0.85);
+  padding: 12px 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  backdrop-filter: blur(10px);
+  color: white;
+  font-weight: bold;
+  font-family: sans-serif;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+}
+
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #333;
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #00d4ff;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* ── SAĞ YUXARI: TƏYYARƏ MƏLUMAT PANELİ ── */
 .info-panel {
   position: absolute;
   top: 20px;
@@ -78,3 +149,64 @@ html, body, #root {
   font-size: 16px;
 }
 .close-btn:hover { color: #ff5555; }
+
+/* ── SİMULYATOR OVERLAY ── */
+.simulator-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 999;
+  background: #000;
+}
+
+/* ── SİMULYATORDAN ÇIXIŞ DÜYMƏSİ ── */
+.exit-sim-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  background: rgba(255, 50, 50, 0.8);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  font-family: sans-serif;
+  transition: 0.2s;
+}
+.exit-sim-btn:hover {
+  background: rgba(255, 50, 50, 1);
+  transform: scale(1.05);
+}
+
+/* ── SİMULYATOR XƏBƏRDARLIQLARI ── */
+.sim-warnings {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.warning-item {
+  background: rgba(255, 165, 0, 0.95);
+  color: black;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: bold;
+  font-family: sans-serif;
+  animation: fadeIn 0.3s ease-in-out;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
