@@ -1,0 +1,81 @@
+.entry-container {
+  position: fixed;
+  inset: 0;
+  background: #0a0e17;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  font-family: 'Courier New', monospace;
+}
+
+.entry-modal {
+  background: rgba(0, 20, 40, 0.95);
+  border: 1px solid #00d4ff;
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 800px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(0, 212, 255, 0.2);
+}
+
+.entry-modal h1 {
+  color: #00d4ff;
+  margin-bottom: 10px;
+  font-size: 32px;
+}
+
+.entry-modal p {
+  color: #a0d8ff;
+  margin-bottom: 30px;
+}
+
+.airport-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 30px;
+}
+
+.airport-card {
+  background: rgba(0, 50, 80, 0.5);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: white;
+}
+
+.airport-card:hover {
+  background: rgba(0, 100, 150, 0.5);
+}
+
+.airport-card.active {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: #00d4ff;
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.5);
+}
+
+.airport-card h3 { margin: 0; color: #00d4ff; font-size: 24px; }
+.airport-card p { margin: 5px 0; font-size: 14px; }
+.airport-card small { opacity: 0.6; font-size: 11px; }
+
+.start-btn {
+  background: #00d4ff;
+  color: #000;
+  border: none;
+  padding: 15px 40px;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+  font-family: inherit;
+}
+
+.start-btn:hover {
+  background: #00a8cc;
+  transform: scale(1.05);
+}
