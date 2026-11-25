@@ -6,7 +6,6 @@ import './SimulatorView.css';
 
 Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN;
 
-// Bulud teksturası (SVG)
 const cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
   <ellipse cx="50" cy="60" rx="40" ry="25" fill="white" opacity="0.85"/>
   <ellipse cx="100" cy="50" rx="50" ry="30" fill="white" opacity="0.85"/>
@@ -21,7 +20,8 @@ export default function SimulatorView() {
   const physicsRef = useRef(null);
   const inputRef = useRef({ up: false, down: false, left: false, right: false, shift: false, ctrl: false });
   const cameraModeRef = useRef('chase');
-  const camStateRef = useRef({ heading: 90, pitch: 0, roll: 0, initialized: false });
+  const camOffsetRef = useRef({ heading: 0, pitch: 0 });
+  const mouseActiveRef = useRef(false);
   const [hud, setHud] = useState({ speed: 200, alt: 3000, heading: 90, pitch: 0, roll: 0, throttle: 50 });
   const [cameraMode, setCameraMode] = useState('chase');
   const [status, setStatus] = useState('flying');
@@ -41,6 +41,14 @@ export default function SimulatorView() {
       terrain: Cesium.Terrain.fromWorldTerrain(),
     });
 
+    // ✅ Cesium-un default mouse idarəsini söndür (biz özümüz idarə edəcəyik)
+    const ctrl = viewer.scene.screenSpaceCameraController;
+    ctrl.enableRotate = false;
+    ctrl.enableTranslate = false;
+    ctrl.enableTilt = false;
+    ctrl.enableLook = false;
+    // enableZoom açıq qalır (mouse wheel ilə zoom)
+
     // ✅ 3D BİNALAR (Bakı)
     Cesium.createOsmBuildingsAsync()
       .then((buildings) => {
@@ -48,7 +56,7 @@ export default function SimulatorView() {
       })
       .catch((e) => console.warn('OSM buildings failed:', e));
 
-    // ✅ BULUDLAR (hərəkət hissi üçün)
+    // ✅ BULUDLAR
     for (let i = 0; i < 40; i++) {
       const lat = 40.3 + Math.random() * 0.4;
       const lon = 49.4 + Math.random() * 1.2;
@@ -79,6 +87,34 @@ export default function SimulatorView() {
       },
     });
 
+    // ── MOUSE (baxmaq üçün) ──
+    const canvas = viewer.scene.canvas;
+    let lastMouseX = 0, lastMouseY = 0;
+
+    const onMouseDown = (e) => {
+      if (e.button !== 0) return;
+      mouseActiveRef.current = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    };
+    const onMouseMove = (e) => {
+      if (!mouseActiveRef.current) return;
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+
+      camOffsetRef.current.heading = Math.max(-180, Math.min(180, camOffsetRef.current.heading - dx * 0.3));
+      camOffsetRef.current.pitch = Math.max(-45, Math.min(45, camOffsetRef.current.pitch + dy * 0.3));
+    };
+    const onMouseUp = () => {
+      mouseActiveRef.current = false;
+    };
+
+    canvas.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+
     // ── KLAVİATURA ──
     const onKeyDown = (e) => {
       const input = inputRef.current;
@@ -91,7 +127,7 @@ export default function SimulatorView() {
       if (e.key === 'c' || e.key === 'C') {
         const next = cameraModeRef.current === 'chase' ? 'cockpit' : 'chase';
         cameraModeRef.current = next;
-        camStateRef.current.initialized = false;
+        camOffsetRef.current = { heading: 0, pitch: 0 };
         setCameraMode(next);
       }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
@@ -132,10 +168,7 @@ export default function SimulatorView() {
       planeEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(pos, hpr);
 
       // ── KAMERA ──
-      const cam = camStateRef.current;
-
       if (cameraModeRef.current === 'cockpit') {
-        // ✅ COCKPIT: modeli gizlət, kameranı təyyarənin içindən
         planeEntity.show = false;
         viewer.trackedEntity = undefined;
 
@@ -148,43 +181,36 @@ export default function SimulatorView() {
           },
         });
       } else {
-        // ✅ CHASE: modeli göstər, kamera lag ilə izlə
         planeEntity.show = true;
 
-        if (!cam.initialized) {
-          cam.heading = physics.heading;
-          cam.pitch = physics.pitch;
-          cam.roll = physics.roll;
-          cam.initialized = true;
+        // Mouse buraxılıbsa → offset yumşaq sıfıra qayıdır
+        if (!mouseActiveRef.current) {
+          const lerpFactor = 0.05;
+          camOffsetRef.current.heading *= (1 - lerpFactor);
+          camOffsetRef.current.pitch *= (1 - lerpFactor);
         }
 
-        // Kamera lag (yumşaq izləmə)
-        const lerpFactor = 1 - Math.exp(-dt * 3); // 3 = lag sürəti
-        cam.heading += (physics.heading - cam.heading) * lerpFactor;
-        cam.pitch += (physics.pitch - cam.pitch) * lerpFactor;
-        cam.roll += (physics.roll - cam.roll) * lerpFactor;
-
-        // Kamera mövqeyi: təyyarənin arxasında, bir az yuxarıda
+        // Təyyarənin arxasına kamera yerləşdir
         const camHpr = new Cesium.HeadingPitchRoll(
-          Cesium.Math.toRadians(cam.heading),
-          Cesium.Math.toRadians(cam.pitch),
-          Cesium.Math.toRadians(cam.roll)
+          Cesium.Math.toRadians(physics.heading + camOffsetRef.current.heading),
+          Cesium.Math.toRadians(physics.pitch),
+          Cesium.Math.toRadians(physics.roll)
         );
-        const camOffset = new Cesium.Cartesian3(0, -80, 30); // arxa + yuxarı
+        const camOffset = new Cesium.Cartesian3(0, -80, 30);
         const camTransform = Cesium.Transforms.headingPitchRollToFixedFrame(pos, camHpr);
         const camPos = Cesium.Matrix4.multiplyByPoint(camTransform, camOffset, new Cesium.Cartesian3());
 
         viewer.camera.setView({
           destination: camPos,
           orientation: {
-            heading: Cesium.Math.toRadians(cam.heading),
-            pitch: Cesium.Math.toRadians(cam.pitch - 10),
-            roll: Cesium.Math.toRadians(cam.roll),
+            heading: Cesium.Math.toRadians(physics.heading + camOffsetRef.current.heading),
+            pitch: Cesium.Math.toRadians(physics.pitch - 10 + camOffsetRef.current.pitch),
+            roll: Cesium.Math.toRadians(physics.roll),
           },
         });
       }
 
-      // HUD (10 fps)
+      // HUD
       if (now - lastHudUpdate > 100) {
         setHud({
           speed: Math.round(physics.speed),
@@ -208,6 +234,9 @@ export default function SimulatorView() {
       cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      canvas.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
       if (!viewer.isDestroyed()) viewer.destroy();
     };
   }, []);
@@ -230,7 +259,7 @@ export default function SimulatorView() {
       </div>
 
       <div className="sim-controls">
-        ↑↓ Pitch · ←→ Roll · Shift Throttle+ · Ctrl Throttle− · C Camera
+        ↑↓ Pitch · ←→ Roll · Shift Throttle+ · Ctrl Throttle− · C Camera · Mouse Drag Look
       </div>
 
       {status === 'crashed' && (
