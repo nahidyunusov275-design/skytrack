@@ -14,11 +14,11 @@ const cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
   <ellipse cx="80" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
   <ellipse cx="130" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
 </svg>`;
-const cloudUrl = 'data:image/svg+xml;base64,' + btoa(cloudSvg);
 
 // Səsli xəbərdarlıq funksiyası
 const speak = (text) => {
   if ('speechSynthesis' in window) {
+    window.speechSynthesis.cancel(); // Əvvəlki səsləri ləğv et ki, üst-üstə yığılmasın
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'en-US';
     utterance.rate = 1.0;
@@ -31,6 +31,8 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
   const physicsRef = useRef(null);
   const inputRef = useRef({ up: false, down: false, left: false, right: false, shift: false, ctrl: false });
   const cameraModeRef = useRef('chase');
+  const statusRef = useRef('flying'); // Statusu ref-də saxlayırıq ki, useEffect təkrar işləməsin
+  
   const [hud, setHud] = useState({ speed: 200, alt: 3000, heading: 90, pitch: 0, roll: 0, throttle: 50 });
   const [cameraMode, setCameraMode] = useState('chase');
   const [status, setStatus] = useState('flying');
@@ -40,6 +42,9 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
   const airport = AIRPORTS[targetAirport] || AIRPORTS.GYD;
 
   useEffect(() => {
+    // ✅ BTOA XƏTASI HƏLLİ: cloudUrl-i burada yaradırıq
+    const cloudUrl = 'data:image/svg+xml;base64,' + btoa(cloudSvg);
+
     const viewer = new Cesium.Viewer(viewerRef.current, {
       animation: false,
       timeline: false,
@@ -251,8 +256,14 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
         }
       }
 
-      if (physics.crashed && status !== 'crashed') setStatus('crashed');
-      else if (physics.landed && status !== 'landed') setStatus('landed');
+      // ✅ STATUS XƏTASI HƏLLİ: statusRef istifadə edirik
+      if (physics.crashed && statusRef.current !== 'crashed') {
+        statusRef.current = 'crashed';
+        setStatus('crashed');
+      } else if (physics.landed && statusRef.current !== 'landed') {
+        statusRef.current = 'landed';
+        setStatus('landed');
+      }
 
       rafId = requestAnimationFrame(update);
     };
@@ -264,7 +275,7 @@ export default function SimulatorView({ targetAirport = 'GYD' }) {
       window.removeEventListener('keyup', onKeyUp);
       if (!viewer.isDestroyed()) viewer.destroy();
     };
-  }, [airport, status]);
+  }, [airport]); // ✅ STATUS-U BURADAN SİLDİK
 
   return (
     <div className="sim-container">
