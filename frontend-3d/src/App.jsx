@@ -1,9 +1,11 @@
 import LandedPanel from './LandedPanel';
 import InboundPanel from './InboundPanel';
+import SimulatorTest from './SimulatorTest';
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
 import './App.css'
+
 
 // Təyyarə ikonu (SVG)
 const planeSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M21,16V14L13,9V3.5A1.5,1.5 0 0,0 11.5,2A1.5,1.5 0 0,0 10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z"/></svg>`;
@@ -45,6 +47,9 @@ const STATUS_LABELS = {
 };
 
 export default function App() {
+    // Test rejimi: ?test=1 ilə açılır
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('test') === '1') return <SimulatorTest />;
   const viewerRef = useRef(null)
   const viewerInstanceRef = useRef(null)
   const planesMapRef = useRef(new Map())      // hex -> plane data
