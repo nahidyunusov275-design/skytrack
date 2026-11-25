@@ -3,25 +3,27 @@ from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import time
 import math
+import asyncio
 
 app = FastAPI(title="SkyTrack 3D API")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,   # ✅ "*" ilə True ola bilməz
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ---------- CACHE ----------
 _cache = {}
-CACHE_TTL = 300  # 5 dəqiqə (opensky limitini qoruyur)
+CACHE_TTL = 10            # ✅ frontend 10 saniyədə bir poll edir
+OPENSKY_CACHE_TTL = 60    # ✅ opensky limitini qoru
 
-def get_cache(key):
+def get_cache(key, ttl=CACHE_TTL):
     if key in _cache:
         data, ts = _cache[key]
-        if time.time() - ts < CACHE_TTL:
+        if time.time() - ts < ttl:
             return data
     return None
 
@@ -50,7 +52,6 @@ def _get(p, *keys):
     return None
 
 def _num(v):
-    """✅ String 'ground', None, bool və s.-ni təhlükəsiz rəqəmə çevir"""
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)):
@@ -73,7 +74,6 @@ def bearing(lat1, lon1, lat2, lon2):
     return (math.degrees(math.atan2(x, y)) + 360) % 360
 
 def find_target_airport(lat, lon, heading):
-    # ✅ Heading rəqəm deyilsə, target yoxdur
     if not isinstance(heading, (int, float)):
         return None
     best, best_score = None, float('inf')
@@ -97,7 +97,6 @@ def find_target_airport(lat, lon, heading):
     return best
 
 def classify_plane(alt, speed, target):
-    # ✅ Rəqəm olmayanları sıfıra çevir
     if not isinstance(alt, (int, float)):
         alt = 0
     if not isinstance(speed, (int, float)):
@@ -120,7 +119,6 @@ def classify_plane(alt, speed, target):
     return "cruise"
 
 def calculate_eta(distance_nm, groundspeed_kts):
-    # ✅ Rəqəm olmayanları rədd et
     if not isinstance(groundspeed_kts, (int, float)) or groundspeed_kts < 50:
         return None
     return round((distance_nm / groundspeed_kts) * 60, 1)
@@ -128,17 +126,18 @@ def calculate_eta(distance_nm, groundspeed_kts):
 # ---------- API FALLBACK ----------
 HEADERS = {
     "Accept": "application/json",
+    "User-Agent": "SkyTrack3D/2.8 (https://skytrack-3d-iota.vercel.app)",
 }
 
 async def fetch_adsb_lol(client, lat, lon, radius_nm):
     url = f"https://api.adsb.lol/v2/point/{lat}/{lon}/{radius_nm}"
-    r = await client.get(url, timeout=10)
+    r = await client.get(url, timeout=8)
     r.raise_for_status()
     return r.json().get("ac", []), "adsb.lol"
 
 async def fetch_adsb_fi(client, lat, lon, radius_nm):
     url = f"https://opendata.adsb.fi/api/v2/lat/{lat}/lon/{lon}/dist/{radius_nm}"
-    r = await client.get(url, timeout=10)
+    r = await client.get(url, timeout=8)
     r.raise_for_status()
     return r.json().get("aircraft", []), "adsb.fi"
 
@@ -152,17 +151,14 @@ async def fetch_opensky(client, lat, lon, radius_nm):
     states = r.json().get("states") or []
     planes = []
     for s in states:
-        # ✅ alt_m: s[13] (geo_altitude) və ya s[7] (baro_altitude, bool ola bilər)
         alt_m = s[13] if s[13] is not None else s[7]
         if not isinstance(alt_m, (int, float)):
             alt_m = None
         alt_ft = round(alt_m * 3.28084, 1) if alt_m is not None else None
 
-        # ✅ speed: s[9] (velocity, m/s)
         vel = s[9] if isinstance(s[9], (int, float)) else None
         speed_kts = round(vel * 1.94384, 1) if vel is not None else None
 
-        # ✅ heading: s[10] (true_track)
         hdg = s[10] if isinstance(s[10], (int, float)) else None
 
         planes.append({
@@ -188,18 +184,47 @@ async def fetch_planes(lat, lon, radius_nm):
         sources_used = []
 
         async with httpx.AsyncClient(headers=HEADERS, follow_redirects=True) as client:
-            for fetcher in [fetch_adsb_lol, fetch_adsb_fi, fetch_opensky]:
-                try:
-                    planes, source = await fetcher(client, lat, lon, radius_nm)
-                    if planes:
-                        sources_used.append(f"{source}({len(planes)})")
-                        for p in planes:
-                            hex_id = p.get("hex")
-                            if hex_id and hex_id not in all_planes:
-                                all_planes[hex_id] = p
-                except Exception as e:
-                    print(f"❌ {fetcher.__name__} failed: {e}")
+            # ✅ adsb.lol və adsb.fi PARALEL
+            tasks = [
+                fetch_adsb_lol(client, lat, lon, radius_nm),
+                fetch_adsb_fi(client, lat, lon, radius_nm),
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for r in results:
+                if isinstance(r, Exception):
+                    print(f"❌ adsb source failed: {r}")
                     continue
+                planes, source = r
+                if planes:
+                    sources_used.append(f"{source}({len(planes)})")
+                    for p in planes:
+                        hex_id = p.get("hex")
+                        if hex_id and hex_id not in all_planes:
+                            all_planes[hex_id] = p
+
+            # ✅ opensky yalnız hər ikisi boşdursa (60 san keş)
+            if not all_planes:
+                opensky_cache_key = f"opensky:{lat}:{lon}:{radius_nm}"
+                opensky_cached = get_cache(opensky_cache_key, OPENSKY_CACHE_TTL)
+                if opensky_cached:
+                    sources_used.append(f"opensky-cache({len(opensky_cached)})")
+                    for p in opensky_cached:
+                        hex_id = p.get("hex")
+                        if hex_id and hex_id not in all_planes:
+                            all_planes[hex_id] = p
+                else:
+                    try:
+                        planes, source = await fetch_opensky(client, lat, lon, radius_nm)
+                        if planes:
+                            sources_used.append(f"{source}({len(planes)})")
+                            set_cache(opensky_cache_key, planes)
+                            for p in planes:
+                                hex_id = p.get("hex")
+                                if hex_id and hex_id not in all_planes:
+                                    all_planes[hex_id] = p
+                    except Exception as e:
+                        print(f"❌ opensky failed: {e}")
 
         merged_planes = list(all_planes.values())
         result = {
@@ -216,7 +241,7 @@ async def fetch_planes(lat, lon, radius_nm):
 # ---------- ENDPOINTS ----------
 @app.get("/")
 def root():
-    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.7"}
+    return {"status": "ok", "service": "SkyTrack 3D", "version": "2.8"}
 
 @app.get("/api/planes-3d")
 async def planes_3d():
@@ -232,7 +257,6 @@ async def planes_az(status: str = None):
         if lat is None or lon is None:
             continue
 
-        # ✅ Hər üç sahəni təmizlə — string "ground" gələ bilər
         alt = _num(_get(p, "alt", "alt_baro"))
         if alt is None:
             alt = 0
