@@ -59,15 +59,15 @@ export default function SimulatorView() {
     for (let i = 0; i < 25; i++) {
       const lat = 40.3 + Math.random() * 0.4;
       const lon = 49.4 + Math.random() * 1.2;
-      const alt = 5000 + Math.random() * 4000;  // ✅ Daha yuxarı (5000-9000m)
+      const alt = 5000 + Math.random() * 4000;
       viewer.entities.add({
         id: `cloud-${i}`,
         position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
         billboard: {
           image: cloudUrl,
-          width: 150 + Math.random() * 150,   // ✅ Daha kiçik (150-300px)
+          width: 150 + Math.random() * 150,
           height: 75 + Math.random() * 75,
-          color: Cesium.Color.WHITE.withAlpha(0.15 + Math.random() * 0.2),  // ✅ Şəffaf
+          color: Cesium.Color.WHITE.withAlpha(0.15 + Math.random() * 0.2),
         },
       });
     }
@@ -85,6 +85,14 @@ export default function SimulatorView() {
         scale: 1.0,
       },
     });
+
+    // ✅ CHASE rejimi: Cesium-un daxili izləmə sistemi (ilk versiyadakı kimi)
+    viewer.trackedEntity = planeEntity;
+    viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(
+      0,
+      Cesium.Math.toRadians(-15),
+      100
+    );
 
     // ── MOUSE (baxmaq üçün) ──
     const canvas = viewer.scene.canvas;
@@ -168,7 +176,7 @@ export default function SimulatorView() {
 
       // ── KAMERA ──
       if (cameraModeRef.current === 'cockpit') {
-        // Cockpit: model gizlət, kameranı təyyarənin içindən
+        // ✅ COCKPIT: model gizlət, kameranı təyyarənin içindən
         planeEntity.show = false;
         viewer.trackedEntity = undefined;
 
@@ -181,34 +189,25 @@ export default function SimulatorView() {
           },
         });
       } else {
-        // Chase: model göstər, kamera arxadan + yuxarıdan
+        // ✅ CHASE: Cesium-un daxili izləmə sistemi (ilk versiyadakı kimi)
         planeEntity.show = true;
+
+        if (viewer.trackedEntity !== planeEntity) {
+          viewer.trackedEntity = planeEntity;
+        }
 
         // Mouse buraxılıbsa → offset yumşaq sıfıra qayıdır
         if (!mouseActiveRef.current) {
-          const lerpFactor = 0.05;
-          camOffsetRef.current.heading *= (1 - lerpFactor);
-          camOffsetRef.current.pitch *= (1 - lerpFactor);
+          camOffsetRef.current.heading *= 0.95;
+          camOffsetRef.current.pitch *= 0.95;
         }
 
-        // ✅ Kamera: yaxın (50m arxa) + yuxarı (25m) + aşağı baxış (-20°)
-        const camHpr = new Cesium.HeadingPitchRoll(
-          Cesium.Math.toRadians(physics.heading + camOffsetRef.current.heading),
-          Cesium.Math.toRadians(physics.pitch),
-          Cesium.Math.toRadians(physics.roll)
+        // ✅ Cesium-un daxili sistemi ilə kamera offset
+        viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(
+          Cesium.Math.toRadians(camOffsetRef.current.heading),
+          Cesium.Math.toRadians(-15 + camOffsetRef.current.pitch),
+          100
         );
-        const camOffset = new Cesium.Cartesian3(0, -50, 25);
-        const camTransform = Cesium.Transforms.headingPitchRollToFixedFrame(pos, camHpr);
-        const camPos = Cesium.Matrix4.multiplyByPoint(camTransform, camOffset, new Cesium.Cartesian3());
-
-        viewer.camera.setView({
-          destination: camPos,
-          orientation: {
-            heading: Cesium.Math.toRadians(physics.heading + camOffsetRef.current.heading),
-            pitch: Cesium.Math.toRadians(physics.pitch - 20 + camOffsetRef.current.pitch),
-            roll: Cesium.Math.toRadians(physics.roll),
-          },
-        });
       }
 
       // HUD
