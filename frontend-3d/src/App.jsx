@@ -1,7 +1,6 @@
 import LandedPanel from './LandedPanel';
 import InboundPanel from './InboundPanel';
 import SimulatorView from './SimulatorView';
-import SimulatorEntry from './SimulatorEntry';
 import { useEffect, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
@@ -44,7 +43,7 @@ const STATUS_LABELS = {
 
 export default function App() {
   const [simMode, setSimMode] = useState(false);
-  const [simTarget, setSimTarget] = useState(null);
+  const [simTarget, setSimTarget] = useState(null); // Simulyator açılanda hədəf hava limanı
 
   const viewerRef = useRef(null);
   const viewerInstanceRef = useRef(null);
@@ -65,8 +64,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (simMode) return; // Əgər simulyatordadırsa, xəritəni yükləmə
-
+    // Xəritə həmişə yüklənir (simMode-dan asılı olmayaraq)
     const viewer = new Cesium.Viewer(viewerRef.current, {
       animation: false,
       timeline: false,
@@ -261,7 +259,7 @@ export default function App() {
       planesMapRef.current.clear();
       if (!viewer.isDestroyed()) viewer.destroy();
     };
-  }, [simMode]);
+  }, []);
 
   return (
     <div className="app-container">
@@ -278,58 +276,63 @@ export default function App() {
             <input 
               type="checkbox" 
               checked={simMode} 
-              onChange={(e) => {
-                setSimMode(e.target.checked);
-                if (!e.target.checked) setSimTarget(null); // Söndürəndə hədəfi sıfırla
-              }} 
+              onChange={(e) => setSimMode(e.target.checked)} 
             />
             <span className="slider round"></span>
           </label>
         </div>
       </div>
 
-      {/* ƏGƏR SİMULYATOR SÖNDÜRÜLÜBSƏ - XƏRİTƏNİ GÖSTƏR */}
-      {!simMode && (
-        <>
-          <div ref={viewerRef} className="cesium-container" />
-          <InboundPanel onPlaneClick={(plane) => { setSelectedPlane(plane); focusOnPlane(plane); }} />
-          <LandedPanel />
-          
-          {selectedPlane && (
-            <div className="info-panel">
-              <button className="close-btn" onClick={() => setSelectedPlane(null)}>✕</button>
-              <h2>✈️ {selectedPlane.callsign || selectedPlane.hex}</h2>
-              <p><strong>Ölkə:</strong> {selectedPlane.country || '—'}</p>
-              <p><strong>Hündürlük:</strong> {selectedPlane.alt ? Math.round(selectedPlane.alt).toLocaleString() + ' ft' : '—'}</p>
-              <p><strong>Sürət:</strong> {selectedPlane.speed ? Math.round(selectedPlane.speed) + ' kts' : '—'}</p>
-              <p><strong>İstiqamət:</strong> {selectedPlane.heading != null ? Math.round(selectedPlane.heading) + '°' : '—'}</p>
-              <p><strong>Status:</strong> {STATUS_LABELS[selectedPlane.status] || selectedPlane.status || '—'}</p>
-              {selectedPlane.target_airport && (
-                <p><strong>Hədəf:</strong> {selectedPlane.target_airport} ({selectedPlane.airport_city})</p>
-              )}
-              {selectedPlane.distance_nm != null && (
-                <p><strong>Məsafə:</strong> {selectedPlane.distance_nm} NM</p>
-              )}
-              {selectedPlane.eta_minutes != null && (
-                <p><strong>ETA:</strong> {selectedPlane.eta_minutes} dəq</p>
-              )}
-              <p><strong>Koordinat:</strong> {selectedPlane.lat?.toFixed(3)}, {selectedPlane.lon?.toFixed(3)}</p>
-            </div>
+      {/* Xəritə həmişə görünür */}
+      <div ref={viewerRef} className="cesium-container" />
+      
+      <InboundPanel onPlaneClick={(plane) => { setSelectedPlane(plane); focusOnPlane(plane); }} />
+      <LandedPanel />
+      
+      {/* Təyyarə məlumat paneli */}
+      {selectedPlane && (
+        <div className="info-panel">
+          <button className="close-btn" onClick={() => setSelectedPlane(null)}>✕</button>
+          <h2>✈️ {selectedPlane.callsign || selectedPlane.hex}</h2>
+          <p><strong>Ölkə:</strong> {selectedPlane.country || '—'}</p>
+          <p><strong>Hündürlük:</strong> {selectedPlane.alt ? Math.round(selectedPlane.alt).toLocaleString() + ' ft' : '—'}</p>
+          <p><strong>Sürət:</strong> {selectedPlane.speed ? Math.round(selectedPlane.speed) + ' kts' : '—'}</p>
+          <p><strong>İstiqamət:</strong> {selectedPlane.heading != null ? Math.round(selectedPlane.heading) + '°' : '—'}</p>
+          <p><strong>Status:</strong> {STATUS_LABELS[selectedPlane.status] || selectedPlane.status || '—'}</p>
+          {selectedPlane.target_airport && (
+            <p><strong>Hədəf:</strong> {selectedPlane.target_airport} ({selectedPlane.airport_city})</p>
           )}
-        </>
+          {selectedPlane.distance_nm != null && (
+            <p><strong>Məsafə:</strong> {selectedPlane.distance_nm} NM</p>
+          )}
+          {selectedPlane.eta_minutes != null && (
+            <p><strong>ETA:</strong> {selectedPlane.eta_minutes} dəq</p>
+          )}
+          <p><strong>Koordinat:</strong> {selectedPlane.lat?.toFixed(3)}, {selectedPlane.lon?.toFixed(3)}</p>
+
+          {/* Simulyator Rejimi aktivdirsə, "İdarə et" düyməsi görünür */}
+          {simMode && (
+            <button 
+              className="control-plane-btn"
+              onClick={() => {
+                // Təyyarənin hədəfi varsa onu götür, yoxdursa Zaqatala (ZTU) default olsun
+                const target = selectedPlane.target_airport || 'ZTU';
+                setSimTarget(target);
+              }}
+            >
+              ✈️ Bu təyyarəni idarə et
+            </button>
+          )}
+        </div>
       )}
 
-      {/* ƏGƏR SİMULYATOR YANDIRILIBSA */}
-      {simMode && (
+      {/* SİMULYATOR PƏNCƏRƏSİ (Xəritənin üzərinə açılır) */}
+      {simTarget && (
         <div className="simulator-overlay">
-          {!simTarget ? (
-            <SimulatorEntry onStart={(code) => setSimTarget(code)} />
-          ) : (
-            <SimulatorView 
-              targetAirport={simTarget} 
-              onExit={() => { setSimMode(false); setSimTarget(null); }} 
-            />
-          )}
+          <SimulatorView 
+            targetAirport={simTarget} 
+            onExit={() => setSimTarget(null)} 
+          />
         </div>
       )}
     </div>
