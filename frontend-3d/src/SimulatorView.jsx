@@ -12,8 +12,8 @@ const cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
   <ellipse cx="100" cy="50" rx="50" ry="30" fill="white" opacity="0.85"/>
   <ellipse cx="150" cy="60" rx="40" ry="25" fill="white" opacity="0.85"/>
   <ellipse cx="80" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
-  <ellipse cx="130" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/></
-svg>`;
+  <ellipse cx="130" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
+</svg>`;
 
 const speak = (text) => {
   if ('speechSynthesis' in window) {
@@ -32,7 +32,7 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
   const cameraModeRef = useRef('chase');
   const statusRef = useRef('flying');
   
-  const [hud, setHud] = useState({ speed: 200, alt: 3000, heading: 90, pitch: 0, roll: 0, throttle: 50, relativeBearing: 0 });
+  const [hud, setHud] = useState({ speed: 200, alt: 3000, heading: 90, pitch: 0, roll: 0, throttle: 50 });
   const [cameraMode, setCameraMode] = useState('chase');
   const [status, setStatus] = useState('flying');
   const [distance, setDistance] = useState(0);
@@ -80,30 +80,17 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       });
     }
 
-    // Hava limanı işıq dirəyi (Beacon)
+    // Hava limanı işıq dirəyi
     viewer.entities.add({
       id: 'airport-beacon',
       position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 5000),
       cylinder: {
         length: 10000,
-        topRadius: 300,
-        bottomRadius: 300,
-        material: Cesium.Color.LIME.withAlpha(0.4),
+        topRadius: 100,
+        bottomRadius: 100,
+        material: Cesium.Color.LIME.withAlpha(0.5),
         outline: true,
         outlineColor: Cesium.Color.LIME,
-      },
-    });
-
-    // Hava limanının ən təpəsində həmişə görünən işıq nöqtəsi
-    viewer.entities.add({
-      id: 'airport-beacon-top',
-      position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 10000),
-      point: {
-        pixelSize: 15,
-        color: Cesium.Color.LIME,
-        outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY, // Həmişə görünsün (dağların arxasından belə)
       },
     });
 
@@ -162,30 +149,18 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       },
     });
 
-    // ── HAVA LİMANINA GEDƏN XƏTT (Təyyarənin bir az qabağından başlayır) ──
+    // ── HAVA LİMANINA GEDƏN XƏTT (Təmiz və Sadə) ──
     viewer.entities.add({
       id: 'flight-guide',
       polyline: {
         positions: new Cesium.CallbackProperty(() => {
-          const physics = physicsRef.current;
-          if (!physics) return [];
-          
-          // Xətti təyyarənin 50 metr qabağından başladırıq ki, kabinədən görünsün
-          const headingRad = Cesium.Math.toRadians(physics.heading);
-          const startLon = physics.lon + Math.sin(headingRad) * 0.0005;
-          const startLat = physics.lat + Math.cos(headingRad) * 0.0005;
-          const startAlt = physics.alt * 0.3048;
-          
-          return [
-            Cesium.Cartesian3.fromDegrees(startLon, startLat, startAlt),
-            Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 0)
-          ];
+          const pos = planeEntity.position.getValue(viewer.clock.currentTime);
+          if (!pos) return [];
+          // Təyyarənin tam mərkəzindən hava limanına qədər
+          return [pos, Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 0)];
         }, false),
-        width: 4,
-        material: new Cesium.PolylineGlowMaterialProperty({
-          glowPower: 0.3,
-          color: Cesium.Color.LIME, // Daha parlaq və qalın
-        }),
+        width: 5, // Qalın xətt
+        material: Cesium.Color.CYAN, // Parlaq mavi rəng (hər yerdə görünür)
       },
     });
 
@@ -253,7 +228,7 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
           destination: pos,
           orientation: {
             heading: Cesium.Math.toRadians(physics.heading),
-            pitch: Cesium.Math.toRadians(physics.pitch), // Təyyarənin burnu hara baxırsa, kamera da ora baxır
+            pitch: Cesium.Math.toRadians(physics.pitch - 5), // Bir az aşağı baxır ki, xətt görünsün
             roll: Cesium.Math.toRadians(physics.roll),
           },
         });
@@ -268,11 +243,6 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       const distNM = distanceToAirportNM(physics.lat, physics.lon, airport);
       if (initialDist === null) initialDist = distNM;
 
-      const dLon = airport.lon - physics.lon;
-      const dLat = airport.lat - physics.lat;
-      const bearingToAirport = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
-      const relativeBearing = (bearingToAirport - physics.heading + 360) % 360;
-
       if (now - lastHudUpdate > 100) {
         setDistance(Math.round(distNM));
         setHud({
@@ -282,7 +252,6 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
           pitch: Math.round(physics.pitch),
           roll: Math.round(physics.roll),
           throttle: Math.round(physics.throttle * 100),
-          relativeBearing: relativeBearing,
         });
         lastHudUpdate = now;
       }
@@ -345,16 +314,6 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       <div ref={viewerRef} className="cesium-container" />
 
       <button className="exit-sim-btn" onClick={onExit}>✕ Çıxış</button>
-
-      <div className="sim-target-arrow-container">
-        <div 
-          className="sim-target-arrow" 
-          style={{ transform: `rotate(${hud.relativeBearing}deg)` }}
-        >
-          ⬆️
-        </div>
-        <span>HƏDƏF</span>
-      </div>
 
       <div className="sim-hud">
         <div className="hud-row"><span>SPEED</span><span>{hud.speed} kt</span></div>
