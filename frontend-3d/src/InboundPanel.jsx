@@ -21,6 +21,7 @@ export default function InboundPanel({ onPlaneClick }) {
   const [planes, setPlanes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [filter, setFilter] = useState('all'); // YENİ: Filtr state-i
 
   useEffect(() => {
     const fetchPlanes = async () => {
@@ -46,20 +47,50 @@ export default function InboundPanel({ onPlaneClick }) {
     return () => clearInterval(interval);
   }, []);
 
+  // YENİ: Təyyarələri seçilmiş filtrə görə süzürük
+  const filteredPlanes = planes.filter(p => {
+    if (filter === 'all') return true;
+    if (filter === 'landing') return ['landing', 'approach', 'descending'].includes(p.status);
+    if (filter === 'inbound') return p.status === 'inbound';
+    return true;
+  });
+
   return (
     <div className="inbound-panel">
       <div className="inbound-header">
         <h2>🛬 Azərbaycana gələnlər</h2>
-        <span className="inbound-count">{planes.length}</span>
+        <span className="inbound-count">{filteredPlanes.length}</span>
+      </div>
+
+      {/* YENİ: Filtr Düymələri */}
+      <div className="filter-buttons">
+        <button 
+          className={filter === 'all' ? 'active' : ''} 
+          onClick={() => setFilter('all')}
+        >
+          Hamısı
+        </button>
+        <button 
+          className={filter === 'landing' ? 'active' : ''} 
+          onClick={() => setFilter('landing')}
+        >
+          Enənlər
+        </button>
+        <button 
+          className={filter === 'inbound' ? 'active' : ''} 
+          onClick={() => setFilter('inbound')}
+        >
+          Gələnlər
+        </button>
       </div>
 
       {loading ? (
         <div className="inbound-loading">Yüklənir...</div>
-      ) : planes.length === 0 ? (
-        <div className="inbound-empty">Hazırda gələn təyyarə yoxdur</div>
+      ) : filteredPlanes.length === 0 ? (
+        <div className="inbound-empty">Bu filtrə uyğun təyyarə yoxdur</div>
       ) : (
         <ul className="inbound-list">
-          {planes.map(p => (
+          {filteredPlanes.map(p => (
             <li
               key={p.hex}
               className="inbound-item"
