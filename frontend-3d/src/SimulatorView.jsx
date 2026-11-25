@@ -41,13 +41,12 @@ export default function SimulatorView() {
       terrain: Cesium.Terrain.fromWorldTerrain(),
     });
 
-    // ✅ Cesium-un default mouse idarəsini söndür (biz özümüz idarə edəcəyik)
+    // ✅ Cesium-un default mouse idarəsini söndür
     const ctrl = viewer.scene.screenSpaceCameraController;
     ctrl.enableRotate = false;
     ctrl.enableTranslate = false;
     ctrl.enableTilt = false;
     ctrl.enableLook = false;
-    // enableZoom açıq qalır (mouse wheel ilə zoom)
 
     // ✅ 3D BİNALAR (Bakı)
     Cesium.createOsmBuildingsAsync()
@@ -56,19 +55,19 @@ export default function SimulatorView() {
       })
       .catch((e) => console.warn('OSM buildings failed:', e));
 
-    // ✅ BULUDLAR
-    for (let i = 0; i < 40; i++) {
+    // ✅ BULUDLAR (kiçik, yuxarıda, şəffaf)
+    for (let i = 0; i < 25; i++) {
       const lat = 40.3 + Math.random() * 0.4;
       const lon = 49.4 + Math.random() * 1.2;
-      const alt = 1500 + Math.random() * 4500;
+      const alt = 5000 + Math.random() * 4000;  // ✅ Daha yuxarı (5000-9000m)
       viewer.entities.add({
         id: `cloud-${i}`,
         position: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
         billboard: {
           image: cloudUrl,
-          width: 400 + Math.random() * 400,
-          height: 200 + Math.random() * 200,
-          color: Cesium.Color.WHITE.withAlpha(0.4 + Math.random() * 0.4),
+          width: 150 + Math.random() * 150,   // ✅ Daha kiçik (150-300px)
+          height: 75 + Math.random() * 75,
+          color: Cesium.Color.WHITE.withAlpha(0.15 + Math.random() * 0.2),  // ✅ Şəffaf
         },
       });
     }
@@ -169,6 +168,7 @@ export default function SimulatorView() {
 
       // ── KAMERA ──
       if (cameraModeRef.current === 'cockpit') {
+        // Cockpit: model gizlət, kameranı təyyarənin içindən
         planeEntity.show = false;
         viewer.trackedEntity = undefined;
 
@@ -181,6 +181,7 @@ export default function SimulatorView() {
           },
         });
       } else {
+        // Chase: model göstər, kamera arxadan + yuxarıdan
         planeEntity.show = true;
 
         // Mouse buraxılıbsa → offset yumşaq sıfıra qayıdır
@@ -190,13 +191,13 @@ export default function SimulatorView() {
           camOffsetRef.current.pitch *= (1 - lerpFactor);
         }
 
-        // Təyyarənin arxasına kamera yerləşdir
+        // ✅ Kamera: yaxın (50m arxa) + yuxarı (25m) + aşağı baxış (-20°)
         const camHpr = new Cesium.HeadingPitchRoll(
           Cesium.Math.toRadians(physics.heading + camOffsetRef.current.heading),
           Cesium.Math.toRadians(physics.pitch),
           Cesium.Math.toRadians(physics.roll)
         );
-        const camOffset = new Cesium.Cartesian3(0, -80, 30);
+        const camOffset = new Cesium.Cartesian3(0, -50, 25);
         const camTransform = Cesium.Transforms.headingPitchRollToFixedFrame(pos, camHpr);
         const camPos = Cesium.Matrix4.multiplyByPoint(camTransform, camOffset, new Cesium.Cartesian3());
 
@@ -204,7 +205,7 @@ export default function SimulatorView() {
           destination: camPos,
           orientation: {
             heading: Cesium.Math.toRadians(physics.heading + camOffsetRef.current.heading),
-            pitch: Cesium.Math.toRadians(physics.pitch - 10 + camOffsetRef.current.pitch),
+            pitch: Cesium.Math.toRadians(physics.pitch - 20 + camOffsetRef.current.pitch),
             roll: Cesium.Math.toRadians(physics.roll),
           },
         });
