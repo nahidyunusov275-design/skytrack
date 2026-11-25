@@ -12,8 +12,8 @@ const cloudSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
   <ellipse cx="100" cy="50" rx="50" ry="30" fill="white" opacity="0.85"/>
   <ellipse cx="150" cy="60" rx="40" ry="25" fill="white" opacity="0.85"/>
   <ellipse cx="80" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
-  <ellipse cx="130" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/>
-</svg>`;
+  <ellipse cx="130" cy="70" rx="30" ry="20" fill="white" opacity="0.85"/></
+svg>`;
 
 const speak = (text) => {
   if ('speechSynthesis' in window) {
@@ -86,11 +86,24 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 5000),
       cylinder: {
         length: 10000,
-        topRadius: 100,
-        bottomRadius: 100,
-        material: Cesium.Color.LIME.withAlpha(0.5),
+        topRadius: 300,
+        bottomRadius: 300,
+        material: Cesium.Color.LIME.withAlpha(0.4),
         outline: true,
         outlineColor: Cesium.Color.LIME,
+      },
+    });
+
+    // Hava limanının ən təpəsində həmişə görünən işıq nöqtəsi
+    viewer.entities.add({
+      id: 'airport-beacon-top',
+      position: Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 10000),
+      point: {
+        pixelSize: 15,
+        color: Cesium.Color.LIME,
+        outlineColor: Cesium.Color.WHITE,
+        outlineWidth: 2,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY, // Həmişə görünsün (dağların arxasından belə)
       },
     });
 
@@ -149,24 +162,33 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       },
     });
 
-    // Hava limanına gedən bələdçi xətti
+    // ── HAVA LİMANINA GEDƏN XƏTT (Təyyarənin bir az qabağından başlayır) ──
     viewer.entities.add({
       id: 'flight-guide',
       polyline: {
         positions: new Cesium.CallbackProperty(() => {
-          const pos = planeEntity.position.getValue(viewer.clock.currentTime);
-          if (!pos) return [];
-          return [pos, Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 0)];
+          const physics = physicsRef.current;
+          if (!physics) return [];
+          
+          // Xətti təyyarənin 50 metr qabağından başladırıq ki, kabinədən görünsün
+          const headingRad = Cesium.Math.toRadians(physics.heading);
+          const startLon = physics.lon + Math.sin(headingRad) * 0.0005;
+          const startLat = physics.lat + Math.cos(headingRad) * 0.0005;
+          const startAlt = physics.alt * 0.3048;
+          
+          return [
+            Cesium.Cartesian3.fromDegrees(startLon, startLat, startAlt),
+            Cesium.Cartesian3.fromDegrees(airport.lon, airport.lat, 0)
+          ];
         }, false),
-        width: 3,
-        material: new Cesium.PolylineDashMaterialProperty({
-          color: Cesium.Color.LIME.withAlpha(0.6),
-          dashLength: 20,
+        width: 4,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.3,
+          color: Cesium.Color.LIME, // Daha parlaq və qalın
         }),
       },
     });
 
-    // Kamera (Orijinal kimi - təyyarəni arxadan izləyir)
     viewer.trackedEntity = planeEntity;
     viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-15), 150);
 
@@ -212,14 +234,11 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       lastTime = now;
 
       const physics = physicsRef.current;
-      
-      // ── ORİJİNAL FİZİKA (Pitch və Roll ilə) ──
       physics.update(dt, inputRef.current);
 
       const pos = Cesium.Cartesian3.fromDegrees(physics.lon, physics.lat, physics.alt * 0.3048);
       planeEntity.position = pos;
 
-      // Təyyarənin burnunun hərəkəti (Pitch və Roll)
       const hpr = new Cesium.HeadingPitchRoll(
         Cesium.Math.toRadians(physics.heading),
         Cesium.Math.toRadians(physics.pitch),
@@ -234,7 +253,7 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
           destination: pos,
           orientation: {
             heading: Cesium.Math.toRadians(physics.heading),
-            pitch: Cesium.Math.toRadians(physics.pitch),
+            pitch: Cesium.Math.toRadians(physics.pitch), // Təyyarənin burnu hara baxırsa, kamera da ora baxır
             roll: Cesium.Math.toRadians(physics.roll),
           },
         });
@@ -249,7 +268,6 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
       const distNM = distanceToAirportNM(physics.lat, physics.lon, airport);
       if (initialDist === null) initialDist = distNM;
 
-      // Hədəf oxu üçün hesablama
       const dLon = airport.lon - physics.lon;
       const dLat = airport.lat - physics.lat;
       const bearingToAirport = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
@@ -328,7 +346,6 @@ export default function SimulatorView({ targetAirport = 'GYD', onExit }) {
 
       <button className="exit-sim-btn" onClick={onExit}>✕ Çıxış</button>
 
-      {/* Hədəf Oxu (Directional Arrow) - Yalnız kiçik ox qalır */}
       <div className="sim-target-arrow-container">
         <div 
           className="sim-target-arrow" 
