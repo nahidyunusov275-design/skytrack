@@ -20,8 +20,6 @@ export default function SimulatorView() {
   const physicsRef = useRef(null);
   const inputRef = useRef({ up: false, down: false, left: false, right: false, shift: false, ctrl: false });
   const cameraModeRef = useRef('chase');
-  const camOffsetRef = useRef({ heading: 0, pitch: 0 });
-  const mouseActiveRef = useRef(false);
   const [hud, setHud] = useState({ speed: 200, alt: 3000, heading: 90, pitch: 0, roll: 0, throttle: 50 });
   const [cameraMode, setCameraMode] = useState('chase');
   const [status, setStatus] = useState('flying');
@@ -41,21 +39,14 @@ export default function SimulatorView() {
       terrain: Cesium.Terrain.fromWorldTerrain(),
     });
 
-    // ✅ Cesium-un default mouse idarəsini söndür
-    const ctrl = viewer.scene.screenSpaceCameraController;
-    ctrl.enableRotate = false;
-    ctrl.enableTranslate = false;
-    ctrl.enableTilt = false;
-    ctrl.enableLook = false;
+    // ✅ Cesium-un default mouse idarəsini SÖNDÜRMƏ — o özü idarə edir
 
-    // ✅ 3D BİNALAR (Bakı)
     Cesium.createOsmBuildingsAsync()
       .then((buildings) => {
         if (!viewer.isDestroyed()) viewer.scene.primitives.add(buildings);
       })
       .catch((e) => console.warn('OSM buildings failed:', e));
 
-    // ✅ BULUDLAR (kiçik, yuxarıda, şəffaf)
     for (let i = 0; i < 25; i++) {
       const lat = 40.3 + Math.random() * 0.4;
       const lon = 49.4 + Math.random() * 1.2;
@@ -86,7 +77,7 @@ export default function SimulatorView() {
       },
     });
 
-    // ✅ CHASE rejimi: Cesium-un daxili izləmə sistemi (ilk versiyadakı kimi)
+    // ✅ Chase: Cesium-un daxili sistemi (mouse avtomatik işləyir)
     viewer.trackedEntity = planeEntity;
     viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(
       0,
@@ -94,35 +85,6 @@ export default function SimulatorView() {
       100
     );
 
-    // ── MOUSE (baxmaq üçün) ──
-    const canvas = viewer.scene.canvas;
-    let lastMouseX = 0, lastMouseY = 0;
-
-    const onMouseDown = (e) => {
-      if (e.button !== 0) return;
-      mouseActiveRef.current = true;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-    };
-    const onMouseMove = (e) => {
-      if (!mouseActiveRef.current) return;
-      const dx = e.clientX - lastMouseX;
-      const dy = e.clientY - lastMouseY;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-
-      camOffsetRef.current.heading = Math.max(-180, Math.min(180, camOffsetRef.current.heading - dx * 0.3));
-      camOffsetRef.current.pitch = Math.max(-45, Math.min(45, camOffsetRef.current.pitch + dy * 0.3));
-    };
-    const onMouseUp = () => {
-      mouseActiveRef.current = false;
-    };
-
-    canvas.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-
-    // ── KLAVİATURA ──
     const onKeyDown = (e) => {
       const input = inputRef.current;
       if (e.key === 'ArrowUp') input.up = true;
@@ -134,7 +96,6 @@ export default function SimulatorView() {
       if (e.key === 'c' || e.key === 'C') {
         const next = cameraModeRef.current === 'chase' ? 'cockpit' : 'chase';
         cameraModeRef.current = next;
-        camOffsetRef.current = { heading: 0, pitch: 0 };
         setCameraMode(next);
       }
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
@@ -151,7 +112,6 @@ export default function SimulatorView() {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
-    // ── UPDATE LOOP ──
     let lastTime = performance.now();
     let lastHudUpdate = 0;
     let rafId;
@@ -176,9 +136,9 @@ export default function SimulatorView() {
 
       // ── KAMERA ──
       if (cameraModeRef.current === 'cockpit') {
-        // ✅ COCKPIT: model gizlət, kameranı təyyarənin içindən
+        // Cockpit: model gizlət, kameranı təyyarənin içindən
         planeEntity.show = false;
-        viewer.trackedEntity = undefined;
+        if (viewer.trackedEntity) viewer.trackedEntity = undefined;
 
         viewer.camera.setView({
           destination: pos,
@@ -189,28 +149,19 @@ export default function SimulatorView() {
           },
         });
       } else {
-        // ✅ CHASE: Cesium-un daxili izləmə sistemi (ilk versiyadakı kimi)
+        // Chase: Cesium-un daxili sistemi (mouse avtomatik)
         planeEntity.show = true;
-
         if (viewer.trackedEntity !== planeEntity) {
           viewer.trackedEntity = planeEntity;
+          viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(
+            0,
+            Cesium.Math.toRadians(-15),
+            100
+          );
         }
-
-        // Mouse buraxılıbsa → offset yumşaq sıfıra qayıdır
-        if (!mouseActiveRef.current) {
-          camOffsetRef.current.heading *= 0.95;
-          camOffsetRef.current.pitch *= 0.95;
-        }
-
-        // ✅ Cesium-un daxili sistemi ilə kamera offset
-        viewer.trackedEntityOffset = new Cesium.HeadingPitchRange(
-          Cesium.Math.toRadians(camOffsetRef.current.heading),
-          Cesium.Math.toRadians(-15 + camOffsetRef.current.pitch),
-          100
-        );
+        // ✅ trackedEntityOffset-ə TOXUNMA — Cesium özü mouse ilə idarə edir
       }
 
-      // HUD
       if (now - lastHudUpdate > 100) {
         setHud({
           speed: Math.round(physics.speed),
@@ -234,9 +185,6 @@ export default function SimulatorView() {
       cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
-      canvas.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
       if (!viewer.isDestroyed()) viewer.destroy();
     };
   }, []);
