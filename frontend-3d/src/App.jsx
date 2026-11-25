@@ -1,6 +1,6 @@
 import LandedPanel from './LandedPanel';
 import InboundPanel from './InboundPanel';
-import SimulatorTest from './SimulatorTest';
+import SimulatorView from './SimulatorView';
 import { useEffect, useRef, useState } from 'react'
 import * as Cesium from 'cesium'
 import 'cesium/Build/Cesium/Widgets/widgets.css'
@@ -49,7 +49,7 @@ const STATUS_LABELS = {
 export default function App() {
     // Test rejimi: ?test=1 ilə açılır
   const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('test') === '1') return <SimulatorTest />;
+  if (urlParams.get('test') === '1') return <SimulatorView />;
   const viewerRef = useRef(null)
   const viewerInstanceRef = useRef(null)
   const planesMapRef = useRef(new Map())      // hex -> plane data
